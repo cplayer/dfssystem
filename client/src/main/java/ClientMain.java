@@ -5,7 +5,10 @@
 
 public class ClientMain {
     public static void main(String[] args) {
-        ClientProcessor processor = new ClientProcessor();
-        processor.test();
+        for (String str : args) {
+            System.out.println(str);
+        }
+        // ClientProcessor processor = new ClientProcessor();
+        // processor.send();
     }
 }

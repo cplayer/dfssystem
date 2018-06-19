@@ -5,6 +5,7 @@
 
 public class DataServerMain {
     public static void main(String[] args) {
-        System.out.println("Hello World!");
+        DataServerProcessor processor = new DataServerProcessor();
+        processor.listen();
     }
 }
