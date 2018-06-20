@@ -8,7 +8,7 @@ import org.apache.logging.log4j.LogManager;
 
 public class ClientMain {
 
-    private static final Logger logger = LogManager.getLogger(ClientMain.class);
+    private static final Logger logger = LogManager.getLogger("clientLogger");
 
     public static void main(String[] args) {
         if (args.length > 0) {
