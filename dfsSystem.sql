@@ -1,0 +1,14 @@
+CREATE TABLE IF NOT EXISTS `dataServerList` (
+    `fileID` INT UNSIGNED,
+    `fileName` VARCHAR(100) NOT NULL,
+    `filePath` VARCHAR(255) NOT NULL,
+    PRIMARY KEY (`fileID`)
+)ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE IF NOT EXISTS `dataFileList` (
+    `fileID` INT UNSIGNED,
+    `chunkID` INT UNSIGNED,
+    `chunkFilePath` VARCHAR(255) NOT NULL,
+    `chunkFileName` VARCHAR(255) NOT NULL,
+    PRIMARY KEY (`fileID`)
+)ENGINE=InnoDB DEFAULT CHARSET=utf8;
