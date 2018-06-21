@@ -11,11 +11,17 @@ import org.apache.logging.log4j.LogManager;
 
 class DataServerProcessor {
     private static final Logger logger = LogManager.getLogger("dataServerLogger");
+    private int portNumber = 0;
+
+    DataServerProcessor () {};
+    DataServerProcessor (int port) {
+        this.portNumber = port;
+    }
 
     // 监听函数
     void listen () {
         try {
-            ServerSocket serverSocket = new ServerSocket(36000);
+            ServerSocket serverSocket = new ServerSocket(this.portNumber);
             Socket socket = serverSocket.accept();
             InputStream inputStream = socket.getInputStream();
             int bufferLen = 2 * 1024 * 1024 + 16 + 8;

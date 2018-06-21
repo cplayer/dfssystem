@@ -12,6 +12,10 @@ public class DataServerMain {
 
     public static void main (String[] args) {
         logger.info("DataServer启动。");
+        if (args.length < 2) {
+            logger.error("请输入正确的启动端口号！");
+            return;
+        }
         DataServerProcessor processor = new DataServerProcessor();
         // 启动之后不停的接收消息
         try {
