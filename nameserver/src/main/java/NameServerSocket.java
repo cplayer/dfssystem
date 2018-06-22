@@ -8,7 +8,6 @@ import org.apache.logging.log4j.LogManager;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Arrays;
 import java.io.InputStream;
 import java.io.OutputStream;
 
@@ -18,6 +17,7 @@ class NameServerSocket {
     private Socket socket;
     private int headerLen = 64;
     private int chunkLen = 2 * 1024 * 1024;
+    private int ipLen = 2 * 1024;
     private int commandLen = 8;
     private int port = 0;
 
@@ -33,32 +33,24 @@ class NameServerSocket {
 
     // 接收一个完整的块信息（包含块头+块内容），用于上传命令
     byte[] receiveChunk () {
-        // byte[] header = new byte[headerLen];
-        // byte[] chunk = new byte[chunkLen];
         byte[] chunkData = new byte[chunkLen + headerLen];
         try {
             socket = ssocket.accept();
             int readLen;
             InputStream instream = socket.getInputStream();
-            // readLen = instream.read(header);
-            // if (readLen < headerLen) {
-            //     logger.error("socket读取chunk头错误：长度不足64Byte！");
-            //     return new byte[0];
-            // };
-            // readLen = instream.read(chunk);
-            // if (readLen < chunkLen) {
-            //     logger.error("socket读取chunk数据错误，长度不足2MB！");
-            // }
-            readLen = instream.read(chunkData);
+            readLen = instream.read(chunkData, 0, headerLen);
+            logger.trace("读取了" + readLen + "Bytes数据。");
+            readLen = 0;
+            for (int i = 0; i < chunkLen; i += ipLen) {
+                readLen += instream.read(chunkData, headerLen + i, ipLen);
+            }
             logger.trace("读取了" + readLen + "Bytes数据。");
             instream.close();
+            socket.close();
         } catch (IOException e) {
             logger.error("socket连接错误，请检查网络连接，并将此错误报告系统管理员！");
             e.printStackTrace();
         }
-        // byte[] result = new byte[headerLen + chunkLen];
-        // for (int i = 0; i < headerLen; ++i) result[i] = header[i];
-        // for (int i = 0; i < chunkLen; ++i) result[i + headerLen] = chunk[i];
         return chunkData;
     }
 
@@ -76,6 +68,7 @@ class NameServerSocket {
             logger.trace("读取了" + readLen + "Bytes长度的命令。");
             logger.trace("本次读取的命令为：" + new String(command, "UTF-8"));
             instream.close();
+            socket.close();
         } catch (IOException e) {
             logger.error("socket连接错误，请检查网络连接，并将此错误报告系统管理员！");
             e.printStackTrace();
@@ -92,6 +85,7 @@ class NameServerSocket {
             outstream.flush();
             logger.trace("NameServer发送了" + data.length + "字节数据。");
             outstream.close();
+            // socket.shutdownOutput();
             socket.close();
         } catch (IOException e) {
             logger.error("NameServer发送数据出错！");

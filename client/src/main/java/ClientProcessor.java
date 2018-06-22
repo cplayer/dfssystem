@@ -8,8 +8,11 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.io.File;
 import java.net.Socket;
+import java.util.Arrays;
+
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
@@ -18,6 +21,7 @@ class ClientProcessor {
     private Socket socket;
     private int chunkLen = 2 * 1024 * 1024;
     private int headerLen = 64;
+    private int ipLen = 2 * 1024;
     ClientProcessor () {
         logger.info("处理过程启动！");
     }
@@ -37,41 +41,42 @@ class ClientProcessor {
             fileId = bytesToInt(this.receive(4));
             logger.trace("待上传文件的fileId为：" + fileId + ".");
             totIndex = fileUpload.length() / (chunkLen);
-            if (fileUpload.length() % chunkLen != 0) totIndex++;
-            curIndex = 0;
+            if (fileUpload.length() % chunkLen != 0) { totIndex++; }
+            curIndex = 1;
             while (true) {
                 // 读取给定buffer长度的数据
+                Arrays.fill(buffer, (byte)0);
                 readLen = stream.read(buffer, headerLen, chunkLen);
                 logger.trace("读取了" + readLen + "长度的数据，从" + path + "中.");
+                Arrays.fill(buffer, 0, 64, (byte)0);
                 // 填充数据头
                 // 第一部分
                 byte[] tmpBytes = "upload..".getBytes();
-                for (int i = 0; i < 8; ++i) buffer[i] = tmpBytes[i];
+                for (int i = 0; i < 8; ++i) { buffer[i] = tmpBytes[i]; }
                 // 第二部分
-                // tmpBytes = new Long(fileLen).toString().getBytes();
                 tmpBytes = longToBytes(fileLen);
                 for (int i = 0; i < tmpBytes.length; ++i) {
                     buffer[23 - i] = tmpBytes[tmpBytes.length - 1 - i];
                 }
                 // 第三部分
-                // tmpBytes = new Long(totIndex).toString().getBytes();
                 tmpBytes = longToBytes(totIndex);
                 for (int i = 0; i < tmpBytes.length; ++i) {
                     buffer[39 - i] = tmpBytes[tmpBytes.length - 1 - i];
                 }
                 // 第四部分
-                // tmpBytes = new Long(curIndex).toString().getBytes();
                 tmpBytes = longToBytes(curIndex);
                 for (int i = 0; i < tmpBytes.length; ++i) {
                     buffer[55 - i] = tmpBytes[tmpBytes.length - 1 - i];
                 }
                 // 第五部分
-                // tmpBytes = new Integer(fileId).toString().getBytes();
                 tmpBytes = intToBytes(fileId);
                 for (int i = 0; i < tmpBytes.length; ++i) {
                     buffer[63 - i] = tmpBytes[tmpBytes.length - 1 - i];
                 }
-                send(buffer);
+                // send(buffer, 0, headerLen);
+                // send(buffer, headerLen, readLen);
+                sendChunk(buffer, headerLen, readLen);
+                curIndex++;
                 if (readLen < chunkLen) { break; }
             }
             stream.close();
@@ -104,16 +109,36 @@ class ClientProcessor {
     // 向dataserver传送数据
     private int portServer = 36000;
     private String addressServer = "127.0.0.1";
+    private void sendChunk (byte[] sendData, int headerlen, int chunklen) {
+        try {
+            socket = new Socket(this.addressServer, this.portServer);
+            OutputStream outputStream = socket.getOutputStream();
+            outputStream.write(sendData, 0, headerLen);
+            outputStream.flush();
+            for (int i = 0; i < chunklen; i += ipLen) {
+                outputStream.write(sendData, headerLen + i, Math.min(ipLen, chunklen - headerLen - i));
+                outputStream.flush();
+            }
+            logger.trace("Client发送了" + chunklen + "Bytes数据。");
+            outputStream.close();
+            socket.close();
+            // socket.shutdownOutput();
+        } catch (IOException e) {
+            logger.error("发送数据错误！");
+            e.printStackTrace();
+        }
+    }
+
     private void send (byte[] sendData) {
         try {
             socket = new Socket(this.addressServer, this.portServer);
-            socket.setSendBufferSize(sendData.length);
             OutputStream outputStream = socket.getOutputStream();
             outputStream.write(sendData);
             outputStream.flush();
             logger.trace("Client发送了" + sendData.length + "Bytes数据。");
             outputStream.close();
             socket.close();
+            // socket.shutdownOutput();
         } catch (IOException e) {
             logger.error("发送数据错误！");
             e.printStackTrace();
@@ -124,7 +149,7 @@ class ClientProcessor {
         byte[] result = new byte[length];
         try {
             socket = new Socket(this.addressServer, this.portServer);
-            socket.setReceiveBufferSize(length);
+            // socket.setReceiveBufferSize(length);
             InputStream instream = socket.getInputStream();
             int readLen;
             readLen = instream.read(result);
@@ -142,8 +167,8 @@ class ClientProcessor {
     private byte[] longToBytes (long value) {
         byte[] result = new byte[8];
         for (int i = 7; i >= 0; --i) {
-            result[i] = (byte)((value % 256) & 0xFF);
-            value = value / 256;
+            result[i] = (byte)(value & 0xFF);
+            value = value >> 8;
         }
         return result;
     }
@@ -151,8 +176,8 @@ class ClientProcessor {
     private byte[] intToBytes (int value) {
         byte[] result = new byte[4];
         for (int i = 3; i >= 0; --i) {
-            result[i] = (byte) ((value % 256) & 0xFF);
-            value = value / 256;
+            result[i] = (byte)(value & 0xFF);
+            value = value >> 8;
         }
         return result;
     }
@@ -160,7 +185,8 @@ class ClientProcessor {
     private int bytesToInt (byte[] value) {
         int result = 0;
         for (int i = 0; i < value.length; ++i) {
-            result = result * 256 + value[i];
+            result = result << 8;
+            result = result | (value[i] & 0xff);
         }
         return result;
     }

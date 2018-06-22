@@ -18,7 +18,8 @@ class NameServerProcessor {
     private byte[] buffer;
 
     private static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/dfsSystem?useSSL=true";
+    // 去除了安全连接，待在实验室机器上检查
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/dfsSystem?useSSL=false";
     private static final String sql_USER = "root";
     private static final String sql_PASSWORD = "12345678";
     private Connection connection;
@@ -42,7 +43,7 @@ class NameServerProcessor {
                 buffer = nameSocket.receiveCommand();
                 logger.trace("收到总共" + buffer.length + "Bytes数据。");
                 String command = new String(buffer, "UTF-8");
-                int commandIndex = 0;
+                int commandIndex;
                 for (commandIndex = 0; commandIndex < commandList.length; ++commandIndex) {
                     if (command.contains(commandList[commandIndex])) { break; }
                 }
@@ -70,11 +71,11 @@ class NameServerProcessor {
         }
     }
 
-    void upload () {
+    private void upload () {
         Random random = new Random(System.nanoTime());
         byte[] chunkData;
         int nextFileId = random.nextInt(fileIdUpperBound);
-        while (dataServerListMap.containsKey(nextFileId) == true) {
+        while (dataServerListMap.containsKey(nextFileId)) {
             nextFileId = random.nextInt(fileIdUpperBound);
         }
         logger.trace("新的FileID = " + nextFileId);
@@ -97,7 +98,7 @@ class NameServerProcessor {
         } while (curIndex < totIndex);
     }
 
-    void loadSqlInfo () {
+    private void loadSqlInfo () {
         String sql = "SELECT * from dataServerList";
         try {
             ResultSet result = executeSql(sql);
@@ -115,8 +116,8 @@ class NameServerProcessor {
             }
             result.close();
             try {
-                if (statement != null) statement.close();
-                if (connection != null) connection.close();
+                if (statement != null) { statement.close(); }
+                if (connection != null) { connection.close(); }
             } catch (SQLException e) {
                 logger.error("SQL数据库资源释放错误！");
                 e.printStackTrace();
@@ -128,7 +129,7 @@ class NameServerProcessor {
         }
     }
 
-    ResultSet executeSql (String sql) {
+    private ResultSet executeSql (String sql) {
         connection = null;
         statement = null;
         ResultSet result = null;
@@ -151,8 +152,8 @@ class NameServerProcessor {
     private byte[] intToBytes(int value) {
         byte[] result = new byte[4];
         for (int i = 3; i >= 0; --i) {
-            result[i] = (byte) ((value % 256) & 0xFF);
-            value = value / 256;
+            result[i] = (byte)(value & 0xFF);
+            value = value >> 8;
         }
         return result;
     }
