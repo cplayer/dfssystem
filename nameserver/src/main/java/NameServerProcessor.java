@@ -26,7 +26,7 @@ class NameServerProcessor {
     private static final String sql_PASSWORD = "12345678";
     private Connection connection;
     private Statement statement;
-    private TreeMap<Integer, SqlServerListNode> dataServerListMap;
+    private TreeMap<Integer, SqlServerListNode> nameServerFileListMap;
     private ArrayList<DataServerInfo> dataServers;
 
     private String[] commandList = { "upload", "list", "download", "register" };
@@ -36,7 +36,7 @@ class NameServerProcessor {
         logger.trace("NameServer启动服务。");
         // port默认为36000;
         nameSocket = new NameServerSocket(36000);
-        dataServerListMap = new TreeMap<>();
+        nameServerFileListMap = new TreeMap<>();
         dataServers.clear();
         loadSqlInfo();
     }
@@ -85,7 +85,7 @@ class NameServerProcessor {
         Random random = new Random(System.nanoTime());
         byte[] chunkData;
         int nextFileId = random.nextInt(fileIdUpperBound);
-        while (dataServerListMap.containsKey(nextFileId)) {
+        while (nameServerFileListMap.containsKey(nextFileId)) {
             nextFileId = random.nextInt(fileIdUpperBound);
         }
         logger.trace("新的FileID = " + nextFileId);
@@ -110,16 +110,16 @@ class NameServerProcessor {
 
     // 内部函数，用于加载SQL信息
     private void loadSqlInfo () {
-        String sql = "SELECT * from dataServerList";
+        String sql = "SELECT * from nameServerFileList";
         try {
             ResultSet result = executeSql(sql);
             while (result.next()) {
                 int fileID = result.getInt("fileID");
                 String fileName = result.getString("fileName");
                 String filePath = result.getString("filePath");
-                if (dataServerListMap.containsKey(fileID) == false) {
+                if (nameServerFileListMap.containsKey(fileID) == false) {
                     logger.trace("已读取fileID = " + fileID + "的记录。");
-                    dataServerListMap.put(fileID, new SqlServerListNode(fileID, fileName, filePath));
+                    nameServerFileListMap.put(fileID, new SqlServerListNode(fileID, fileName, filePath));
                 } else {
                     logger.error("SQL数据库中出现重复fileID！重复ID为：" + fileID);
                     break;
@@ -133,9 +133,9 @@ class NameServerProcessor {
                 logger.error("SQL数据库资源释放错误！");
                 e.printStackTrace();
             }
-            logger.trace("获取dataServerList信息完毕！");
+            logger.trace("获取nameServerFileList信息完毕！");
         } catch (SQLException e) {
-            logger.error("获取dataServerList信息错误！");
+            logger.error("获取nameServerFileList信息错误！");
             e.printStackTrace();
         }
     }

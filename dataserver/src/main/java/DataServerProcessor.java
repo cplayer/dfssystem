@@ -5,9 +5,13 @@
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.sql.*;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
@@ -22,6 +26,12 @@ class DataServerProcessor {
     private ServerSocket serverSocket;
     private String[] commandList = { "save", "get" };
 
+    private static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/dfsSystem?useSSL=false";
+    private static final String sql_USER = "root";
+    private static final String sql_PASSWORD = "12345678";
+    private Connection connection;
+    private Statement statement;
     private int portNameServer = 36000;
     private String addressNameServer = "127.0.0.1";
 
@@ -87,6 +97,7 @@ class DataServerProcessor {
                         break;
                     case 1:
                         // 获取chunk
+                        this.get();
                         break;
                     default:
                         break;
@@ -123,7 +134,123 @@ class DataServerProcessor {
 
     // 存储接受到的chunkData
     private void save () {
-        byte[] chunkData = receiveChunk();
+        try {
+            byte[] chunkData = receiveChunk();
+            int fileId = byteToInt(chunkData, 56, 64);
+            long fileChunkTotal = byteToLong(chunkData, 24, 40);
+            long fileChunk = byteToLong(chunkData, 40, 56);
+            long currentMillSecond = System.currentTimeMillis();
+            String fileFullPath = dfsFilePath
+                                + Integer.valueOf(fileId).toString() + "-"
+                                + Long.valueOf(fileChunkTotal).toString() + "-"
+                                + Long.valueOf(fileChunk).toString() + "-"
+                                + Long.valueOf(currentMillSecond).toString() + ".chunkFile";
+            File saveFile = new File(fileFullPath);
+            if (!saveFile.exists()) {
+                saveFile.createNewFile();
+            }
+            FileOutputStream outputStream = new FileOutputStream(saveFile);
+            outputStream.write(chunkData);
+            outputStream.close();
+            sqlInsert(fileId, fileChunk, fileChunkTotal, fileFullPath);
+        } catch (IOException e) {
+            logger.error("DataServer创建文件遇到IO错误！");
+            e.printStackTrace();
+        }
+    }
+
+    void sqlInsert (int fileId, long fileChunk, long fileChunkTotal, String fileFullPath) {
+        String sql = String.format("INSERT INTO dataServerFileList VALUES (%d %ld %d %s)", fileId, fileChunk, fileChunkTotal, fileFullPath);
+        try {
+            ResultSet result = executeSql(sql);
+            result.close();
+        } catch (SQLException e) {
+            logger.error("获取dataServerFileList信息错误！");
+            e.printStackTrace();
+        }
+        try {
+            if (statement != null) { statement.close(); }
+            if (connection != null) { connection.close(); }
+        } catch (SQLException e) {
+            logger.error("SQL数据库资源释放错误！");
+            e.printStackTrace();
+        }
+    }
+
+    // 用于运行SQL语句，需要在程序中手动关闭connection和statement
+    private ResultSet executeSql (String sql) {
+        connection = null;
+        statement = null;
+        ResultSet result = null;
+        try {
+            Class.forName(JDBC_DRIVER);
+            logger.trace("DataServer连接数据库...");
+            connection = DriverManager.getConnection(DB_URL, sql_USER, sql_PASSWORD);
+            statement = connection.createStatement();
+            result = statement.executeQuery(sql);
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        } catch (SQLException e) {
+            logger.error("DataServerSQL数据库连接错误！");
+            e.printStackTrace();
+        }
+        logger.trace("DataServer连接数据库成功，返回数据中...");
+        return result;
+    }
+
+    private void get () {
+        byte[] header = receiveHeader();
+        int fileId = byteToInt(header, 56, 64);
+        long fileChunkTotal = byteToLong(header, 24, 40);
+        long fileChunk = byteToLong(header, 40, 56);
+        String sql = String.format("SELECT * FROM dataServerFileList WHERE fileID=%d and fileChunk=%d and fileChunkTotal=%d",
+                                    fileId, fileChunk, fileChunkTotal);
+        ResultSet result = executeSql(sql);
+        try {
+            int size = 0;
+            result.last();
+            size = result.getRow();
+            if (size > 1) {
+                logger.error("返回值不止一个，请检查SQL数据库数据！");
+                return;
+            }
+            result.first();
+            String filePath = null;
+            while (result.next()) {
+                filePath = result.getString("filePath");
+            }
+            File file = new File(filePath);
+            FileInputStream inputStream = new FileInputStream(file);
+            byte[] chunkData = new byte[chunkLen + headerLen];
+            inputStream.read(chunkData);
+            sendChunk(chunkData, headerLen, chunkLen);
+            inputStream.close();
+        } catch (SQLException e) {
+            logger.error("DataServer读取SQL数据库错误，请检查get方法！");
+            e.printStackTrace();
+        } catch (IOException e) {
+            logger.error("DataServer get方法读取文件错误！");
+            e.printStackTrace();
+        }
+    }
+
+    private void sendChunk (byte[] sendData, int headerlen, int chunklen) {
+        try {
+            Socket socket = serverSocket.accept();
+            OutputStream outputStream = socket.getOutputStream();
+            outputStream.write(sendData, 0, headerLen);
+            outputStream.flush();
+            for (int i = 0; i < chunklen; i += ipLen) {
+                outputStream.write(sendData, headerLen + i, ipLen);
+                outputStream.flush();
+            }
+            logger.trace("dataServer发送了" + chunklen + "Bytes数据。");
+            outputStream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("发送数据错误！");
+            e.printStackTrace();
+        }
     }
 
     byte[] receiveChunk () {
@@ -133,7 +260,7 @@ class DataServerProcessor {
             int readLen;
             InputStream instream = socket.getInputStream();
             readLen = instream.read(chunkData, 0, headerLen);
-            logger.trace("读取了" + readLen + "Bytes数据。");
+            logger.trace("读取了" + readLen + "Bytes数据头。");
             readLen = 0;
             for (int i = 0; i < chunkLen; i += ipLen) {
                 readLen += instream.read(chunkData, headerLen + i, ipLen);
@@ -146,5 +273,42 @@ class DataServerProcessor {
             e.printStackTrace();
         }
         return chunkData;
+    }
+
+    byte[] receiveHeader() {
+        byte[] header = new byte[headerLen];
+        try {
+            Socket socket = serverSocket.accept();
+            int readLen;
+            InputStream instream = socket.getInputStream();
+            readLen = instream.read(header);
+            if (readLen < headerLen) {
+                logger.error("socket读取header错误，header长度不足！");
+            }
+            logger.trace("读取了" + readLen + "Bytes长度的命令。");
+            logger.trace("本次读取的命令为：" + new String(header, "UTF-8"));
+            instream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("socket连接错误，请检查网络连接，并将此错误报告系统管理员！");
+            e.printStackTrace();
+        }
+        return header;
+    }
+
+    int byteToInt (byte[] arr, int start, int end) {
+        int ret = 0;
+        for (int i = start; i < end; ++i) {
+            ret = ret * 256 + arr[i];
+        }
+        return ret;
+    }
+
+    long byteToLong (byte[] arr, int start, int end) {
+        long ret = 0;
+        for (int i = start; i < end; ++i) {
+            ret = ret * 256 + arr[i];
+        }
+        return ret;
     }
 }
