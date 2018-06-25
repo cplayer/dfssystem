@@ -31,7 +31,7 @@ class DataServerProcessor {
     private static final String sql_USER = "root";
     private static final String sql_PASSWORD = "12345678";
     private Connection connection;
-    private Statement statement;
+    private PreparedStatement statement;
     private int portNameServer = 36000;
     private String addressNameServer = "127.0.0.1";
 
@@ -186,8 +186,8 @@ class DataServerProcessor {
             Class.forName(JDBC_DRIVER);
             logger.trace("DataServer连接数据库...");
             connection = DriverManager.getConnection(DB_URL, sql_USER, sql_PASSWORD);
-            statement = connection.createStatement();
-            result = statement.executeQuery(sql);
+            statement = connection.prepareStatement(sql, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE);
+            result = statement.executeQuery();
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
         } catch (SQLException e) {
