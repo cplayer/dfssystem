@@ -107,8 +107,14 @@ class NameServerSocket {
             result.port = socket.getPort();
             readLen = instream.read(data);
             if (readLen < 8) {
-                logger.warn("NameServer注册信息小于指定长度，不为\"Register!");
+                logger.warn("dataServer注册信息小于指定长度，不为\"Register!");
             }
+            byte[] tableSize = new byte[8];
+            readLen = instream.read(tableSize);
+            if (readLen < 8) {
+                logger.warn("dataServer负载信息小于指定长度!");
+            }
+            result.load = bytesToInt(tableSize);
             instream.close();
             outputStream.write("Success!".getBytes());
             outputStream.flush();
@@ -118,6 +124,15 @@ class NameServerSocket {
             logger.error("dataServer注册错误！");
             e.printStackTrace();
             return null;
+        }
+        return result;
+    }
+
+    private int bytesToInt(byte[] value) {
+        int result = 0;
+        for (int i = 0; i < value.length; ++i) {
+            result = result << 8;
+            result = result | (value[i] & 0xff);
         }
         return result;
     }

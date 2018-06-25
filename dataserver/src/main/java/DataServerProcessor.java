@@ -63,6 +63,20 @@ class DataServerProcessor {
             byte[] result = new byte[8];
             outputStream.write("register".getBytes());
             outputStream.flush();
+
+            // 取tableSize，即负载
+            String sql = "SELECT * FROM dataServerFileList";
+            ResultSet resultSet = executeSql(sql);
+            int resultSetSize = 0;
+            resultSet.last();
+            resultSetSize = resultSet.getRow();
+            resultSet.close();
+            statement.close();
+            connection.close();
+            byte[] writeBuffer = new byte[8];
+            copyTo(writeBuffer, 4, 8, intToBytes(resultSetSize));
+            outputStream.write(writeBuffer);
+
             inputStream.read(result);
             resultStr = new String(result);
             if (!"Success!".equals(resultStr)) {
@@ -73,6 +87,9 @@ class DataServerProcessor {
             socket.close();
         } catch (IOException e) {
             logger.error("DataServer注册错误！");
+            e.printStackTrace();
+        } catch (SQLException e) {
+            logger.error("DataServer注册读取SQL数据库错误！");
             e.printStackTrace();
         }
     }
@@ -107,6 +124,10 @@ class DataServerProcessor {
             logger.error("DataServer监听出错！");
             e.printStackTrace();
         }
+    }
+
+    private void copyTo (byte[] target, int begin, int end, byte[] source) {
+        for (int i = begin; i < end; ++i) { target[i] = source[i - begin]; }
     }
 
     private String receiveCommand () {
@@ -310,5 +331,15 @@ class DataServerProcessor {
             ret = ret * 256 + arr[i];
         }
         return ret;
+    }
+
+    // int转bytes数组
+    private byte[] intToBytes (int value) {
+        byte[] result = new byte[4];
+        for (int i = 3; i >= 0; --i) {
+            result[i] = (byte)(value & 0xFF);
+            value = value >> 8;
+        }
+        return result;
     }
 }

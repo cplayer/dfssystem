@@ -62,6 +62,7 @@ class NameServerProcessor {
                         break;
                     case 2:
                         // 下载
+                        this.download();
                         break;
                     case 3:
                         // 注册
@@ -78,6 +79,11 @@ class NameServerProcessor {
                 e.printStackTrace();
             }
         }
+    }
+
+    // 下载功能函数
+    private void download () {
+
     }
 
     // 上传功能函数
@@ -106,6 +112,8 @@ class NameServerProcessor {
             }
             logger.trace("目前接收区块序号为：" + curIndex + ", 总序号为：" + totIndex);
         } while (curIndex < totIndex);
+        // 分发部分
+        // 分发策略：随机分发至至少3个dataServer
     }
 
     // 内部函数，用于加载SQL信息
@@ -201,13 +209,16 @@ class NameServerProcessor {
 class DataServerInfo {
     InetAddress address;
     int port;
+    int load;
     DataServerInfo () {
         address = null;
         port = 0;
+        load = 0;
     }
 
     DataServerInfo (InetAddress address, int port) {
         this.address = address;
         this.port = port;
+        load = 0;
     }
 }
