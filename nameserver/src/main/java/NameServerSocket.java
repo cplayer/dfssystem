@@ -5,6 +5,7 @@
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
+
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -91,5 +92,33 @@ class NameServerSocket {
             logger.error("NameServer发送数据出错！");
             e.printStackTrace();
         }
+    }
+
+    DataServerInfo register () {
+        DataServerInfo result = new DataServerInfo();
+        try {
+            socket = ssocket.accept();
+            InputStream instream = socket.getInputStream();
+            OutputStream outputStream = socket.getOutputStream();
+            // 接收的信息应该是"register"
+            byte[] data = new byte[8];
+            int readLen;
+            result.address = socket.getInetAddress();
+            result.port = socket.getPort();
+            readLen = instream.read(data);
+            if (readLen < 8) {
+                logger.warn("NameServer注册信息小于指定长度，不为\"Register!");
+            }
+            instream.close();
+            outputStream.write("Success!".getBytes());
+            outputStream.flush();
+            outputStream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("dataServer注册错误！");
+            e.printStackTrace();
+            return null;
+        }
+        return result;
     }
 }

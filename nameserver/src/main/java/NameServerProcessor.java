@@ -7,10 +7,12 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
 import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
 import java.sql.*;
 import java.util.TreeMap;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.ArrayList;
 
 class NameServerProcessor {
     private static final Logger logger = LogManager.getLogger("nameServerLogger");
@@ -24,9 +26,10 @@ class NameServerProcessor {
     private static final String sql_PASSWORD = "12345678";
     private Connection connection;
     private Statement statement;
-    private TreeMap<Integer, sqlServerListNode> dataServerListMap;
+    private TreeMap<Integer, SqlServerListNode> dataServerListMap;
+    private ArrayList<DataServerInfo> dataServers;
 
-    private String[] commandList = { "upload", "list", "download" };
+    private String[] commandList = { "upload", "list", "download", "register" };
     private int fileIdUpperBound = 1 << 30;
 
     NameServerProcessor () {
@@ -34,9 +37,11 @@ class NameServerProcessor {
         // port默认为36000;
         nameSocket = new NameServerSocket(36000);
         dataServerListMap = new TreeMap<>();
+        dataServers.clear();
         loadSqlInfo();
     }
 
+    // 主要逻辑函数
     void run () {
         while (true) {
             try {
@@ -58,6 +63,10 @@ class NameServerProcessor {
                     case 2:
                         // 下载
                         break;
+                    case 3:
+                        // 注册
+                        this.register();
+                        break;
                     default:
                         logger.error("client发送的命令不正确！");
                         break;
@@ -71,6 +80,7 @@ class NameServerProcessor {
         }
     }
 
+    // 上传功能函数
     private void upload () {
         Random random = new Random(System.nanoTime());
         byte[] chunkData;
@@ -98,6 +108,7 @@ class NameServerProcessor {
         } while (curIndex < totIndex);
     }
 
+    // 内部函数，用于加载SQL信息
     private void loadSqlInfo () {
         String sql = "SELECT * from dataServerList";
         try {
@@ -108,7 +119,7 @@ class NameServerProcessor {
                 String filePath = result.getString("filePath");
                 if (dataServerListMap.containsKey(fileID) == false) {
                     logger.trace("已读取fileID = " + fileID + "的记录。");
-                    dataServerListMap.put(fileID, new sqlServerListNode(fileID, fileName, filePath));
+                    dataServerListMap.put(fileID, new SqlServerListNode(fileID, fileName, filePath));
                 } else {
                     logger.error("SQL数据库中出现重复fileID！重复ID为：" + fileID);
                     break;
@@ -129,6 +140,7 @@ class NameServerProcessor {
         }
     }
 
+    // 用于运行SQL语句，需要在程序中手动关闭connection和statement
     private ResultSet executeSql (String sql) {
         connection = null;
         statement = null;
@@ -149,7 +161,8 @@ class NameServerProcessor {
         return result;
     }
 
-    private byte[] intToBytes(int value) {
+    // int转bytes数组
+    private byte[] intToBytes (int value) {
         byte[] result = new byte[4];
         for (int i = 3; i >= 0; --i) {
             result[i] = (byte)(value & 0xFF);
@@ -158,17 +171,24 @@ class NameServerProcessor {
         return result;
     }
 
-    class sqlServerListNode {
+    // 注册函数
+    private void register () {
+        DataServerInfo result = nameSocket.register();
+        dataServers.add(result);
+    }
+
+    // 用于服务sqlServerList的私有类
+    private class SqlServerListNode {
         int fileID;
         String fileName;
         String filePath;
-        sqlServerListNode () {
+        SqlServerListNode () {
             fileID = 0; 
             fileName = null; 
             filePath = null;
         }
 
-        sqlServerListNode (int fileID, String fileName, String filePath) {
+        SqlServerListNode (int fileID, String fileName, String filePath) {
             this.fileID = fileID;
             this.fileName = fileName;
             this.filePath = filePath;
@@ -177,3 +197,17 @@ class NameServerProcessor {
 
 }
 
+// 用于IP注册的类
+class DataServerInfo {
+    InetAddress address;
+    int port;
+    DataServerInfo () {
+        address = null;
+        port = 0;
+    }
+
+    DataServerInfo (InetAddress address, int port) {
+        this.address = address;
+        this.port = port;
+    }
+}

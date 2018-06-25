@@ -54,7 +54,7 @@ class ClientProcessor {
                 byte[] tmpBytes = "upload..".getBytes();
                 for (int i = 0; i < 8; ++i) { buffer[i] = tmpBytes[i]; }
                 // 第二部分
-                tmpBytes = longToBytes(fileLen);
+                tmpBytes = longToBytes(readLen);
                 for (int i = 0; i < tmpBytes.length; ++i) {
                     buffer[23 - i] = tmpBytes[tmpBytes.length - 1 - i];
                 }
@@ -75,7 +75,7 @@ class ClientProcessor {
                 }
                 // send(buffer, 0, headerLen);
                 // send(buffer, headerLen, readLen);
-                sendChunk(buffer, headerLen, readLen);
+                sendChunk(buffer, headerLen, chunkLen);
                 curIndex++;
                 if (readLen < chunkLen) { break; }
             }
@@ -116,7 +116,7 @@ class ClientProcessor {
             outputStream.write(sendData, 0, headerLen);
             outputStream.flush();
             for (int i = 0; i < chunklen; i += ipLen) {
-                outputStream.write(sendData, headerLen + i, Math.min(ipLen, chunklen - headerLen - i));
+                outputStream.write(sendData, headerLen + i, ipLen);
                 outputStream.flush();
             }
             logger.trace("Client发送了" + chunklen + "Bytes数据。");

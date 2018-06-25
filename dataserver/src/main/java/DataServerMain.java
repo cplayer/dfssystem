@@ -16,14 +16,8 @@ public class DataServerMain {
             logger.error("请输入正确的启动端口号！");
             return;
         }
+        // dataserver启动之后，通过死循环进行监听NameServer发来的指令。
         DataServerProcessor processor = new DataServerProcessor();
-        // 启动之后不停的接收消息
-        try {
-            while (true) {
-                processor.listen();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        processor.listen();
     }
 }

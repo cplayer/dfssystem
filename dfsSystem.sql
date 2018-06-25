@@ -1,11 +1,11 @@
-CREATE TABLE IF NOT EXISTS `dataServerList` (
+CREATE TABLE IF NOT EXISTS `nameServerList` (
     `fileID` INT UNSIGNED,
     `fileName` VARCHAR(100) NOT NULL,
     `filePath` VARCHAR(255) NOT NULL,
     PRIMARY KEY (`fileID`)
 )ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-CREATE TABLE IF NOT EXISTS `dataFileList` (
+CREATE TABLE IF NOT EXISTS `nameFileList` (
     `fileID` INT UNSIGNED,
     `chunkID` INT UNSIGNED,
     `chunkFilePath` VARCHAR(255) NOT NULL,
