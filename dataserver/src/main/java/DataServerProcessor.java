@@ -114,6 +114,7 @@ class DataServerProcessor {
                         break;
                     case 1:
                         // 获取chunk
+                        this.check();
                         this.get();
                         break;
                     default:
@@ -219,6 +220,32 @@ class DataServerProcessor {
         return result;
     }
 
+    private void check () {
+        byte[] id = new byte[4];
+        String message;
+        try {
+            id = receive(4);
+            int fileId = byteToInt(id, 0, 4);
+            String sql = String.format("SELECT * FROM dataServerFileList WHERE fileID=%d",
+                                        fileId);
+            ResultSet result = executeSql(sql);
+            if (result.next()) {
+                message = "Accepted";
+            } else {
+                message = "Denied  ";
+            }
+            send(message.getBytes());
+            if (message.equals("Accepted")) {
+                int fileTotalLen = result.getInt("fileChunkTotal");
+                send(intToBytes(fileTotalLen));
+            }
+            releaseSql();                                    
+        } catch (SQLException e) {
+            logger.error("dataServer数据库访问错误！");
+            e.printStackTrace();
+        }
+    }
+
     private void get () {
         byte[] header = receiveHeader();
         int fileId = byteToInt(header, 56, 64);
@@ -231,8 +258,13 @@ class DataServerProcessor {
             int size = 0;
             result.last();
             size = result.getRow();
+            if (size == 0) {
+                send("File Not Found".getBytes());
+                return;
+            }
             if (size > 1) {
                 logger.error("返回值不止一个，请检查SQL数据库数据！");
+                sendCommand("error".getBytes());
                 return;
             }
             result.first();
@@ -246,6 +278,7 @@ class DataServerProcessor {
             inputStream.read(chunkData);
             sendChunk(chunkData, headerLen, chunkLen);
             inputStream.close();
+            releaseSql();
         } catch (SQLException e) {
             logger.error("DataServer读取SQL数据库错误，请检查get方法！");
             e.printStackTrace();
@@ -270,6 +303,36 @@ class DataServerProcessor {
             socket.close();
         } catch (IOException e) {
             logger.error("发送数据错误！");
+            e.printStackTrace();
+        }
+    }
+
+    private void sendCommand (byte[] sendData) {
+        try {
+            Socket socket = serverSocket.accept();
+            OutputStream outputStream = socket.getOutputStream();
+            outputStream.write(sendData);
+            outputStream.flush();
+            logger.trace("dataServer发送了" + sendData.length + "Bytes数据。");
+            outputStream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("dataserver发送指令错误！");
+            e.printStackTrace();
+        }
+    }
+
+    private void send (byte[] sendData) {
+        try {
+            Socket socket = serverSocket.accept();
+            OutputStream outputStream = socket.getOutputStream();
+            outputStream.write(sendData);
+            outputStream.flush();
+            logger.trace("dataServer发送了" + sendData.length + "Bytes数据。");
+            outputStream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("dataserver发送数据错误！");
             e.printStackTrace();
         }
     }
@@ -317,6 +380,26 @@ class DataServerProcessor {
         return header;
     }
 
+    byte[] receive (int len) {
+        byte[] receiveData = new byte[len];
+        try {
+            Socket socket = serverSocket.accept();
+            int readLen;
+            InputStream instream = socket.getInputStream();
+            readLen = instream.read(receiveData);
+            if (readLen < len) {
+                logger.warn(String.format("socket读取数据错误，要求%dBytes数据，收到%dBytes数据。", len, readLen));
+            }
+            logger.trace(String.format("读取了%dBytes长度的数据。", readLen));
+            instream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("socket连接错误，请检查网络连接，并将此错误报告系统管理员！");
+            e.printStackTrace();
+        }
+        return receiveData;
+    }
+
     int byteToInt (byte[] arr, int start, int end) {
         int ret = 0;
         for (int i = start; i < end; ++i) {
@@ -341,5 +424,16 @@ class DataServerProcessor {
             value = value >> 8;
         }
         return result;
+    }
+
+    // 释放sql的statement和connection
+    private void releaseSql () {
+        try {
+            if (statement != null) { statement.close(); }
+            if (connection != null) { connection.close(); }
+        } catch (SQLException e) {
+            logger.error("SQL数据库资源释放错误！");
+            e.printStackTrace();
+        }
     }
 }

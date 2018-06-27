@@ -11,7 +11,6 @@ import java.net.InetAddress;
 import java.sql.*;
 import java.util.TreeMap;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.Random;
 import java.util.ArrayList;
@@ -21,13 +20,9 @@ class NameServerProcessor {
     private NameServerSocket nameSocket;
     private byte[] buffer;
 
-    private static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
-    // 去除了安全连接，待在实验室机器上检查
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/dfsSystem?useSSL=false";
-    private static final String sql_USER = "root";
-    private static final String sql_PASSWORD = "12345678";
     private Connection connection;
     private Statement statement;
+    private NameServerSqlService sqlService;
     private TreeMap<Integer, SqlServerListNode> nameServerFileListMap;
     private ArrayList<DataServerInfo> dataServers;
 
@@ -39,6 +34,7 @@ class NameServerProcessor {
         // port默认为36000;
         nameSocket = new NameServerSocket(36000);
         nameServerFileListMap = new TreeMap<>();
+        sqlService = new NameServerSqlService();
         dataServers.clear();
         loadSqlInfo();
     }
@@ -85,7 +81,48 @@ class NameServerProcessor {
 
     // 下载功能函数
     private void download () {
-        // TODO: 下载
+        // 先从client接收文件路径，暂时支持2MB的路径长度
+        try {
+            byte[] routeData = nameSocket.receive(2 * 1024 * 1024);
+            String filePath = new String(routeData, "UTF-8");
+            String sql = String.format("SELECT * from nameServerFileList WHERE filePath='%s'", filePath);
+            ResultSet result = sqlService.executeSql(sql, connection, statement);
+            int fileID = 0;
+            String fileName;
+            while (result.next()) {
+                fileID = result.getInt("fileID");
+                fileName = result.getString("fileName");
+            }
+            result.close();
+            sqlService.releaseSql(connection, statement);
+            ArrayList<byte[]> chunks = new ArrayList<>();
+            int totalChunks = 0;
+            for (DataServerInfo dataServer : dataServers) {
+                InetAddress curAddress = dataServer.address;
+                int curPort = dataServer.port;
+                this.nameSocket.sendData(Convert.intToBytes(fileID), curAddress, curPort);
+                String status = new String(this.nameSocket.receive(8, curAddress, curPort), "UTF-8");
+                if (status.equals("Accepted")) {
+                    totalChunks = Convert.byteToInt(this.nameSocket.receive(4, curAddress, curPort), 0, 4);
+                    break;
+                }
+            }
+            for (int i = 0; i < totalChunks; ++i) {
+                byte[] chunkData;
+                for (DataServerInfo dataServer : dataServers) {
+                    InetAddress curAddress = dataServer.address;
+                    int curPort = dataServer.port;
+
+                }
+            }
+
+        } catch (UnsupportedEncodingException e) {
+            logger.error("client给出的下载文件路径不正确！");
+            e.printStackTrace();
+        } catch (SQLException e) {
+            logger.error("下载文件时访问SQL数据库错误！");
+            e.printStackTrace();
+        }
     }
 
     // 上传功能函数
@@ -97,7 +134,7 @@ class NameServerProcessor {
             nextFileId = random.nextInt(fileIdUpperBound);
         }
         logger.trace("新的FileID = " + nextFileId);
-        this.nameSocket.sendData(intToBytes(nextFileId));
+        this.nameSocket.sendData(Convert.intToBytes(nextFileId));
 
         long totIndex, curIndex;
         do {
@@ -132,7 +169,7 @@ class NameServerProcessor {
     private void loadSqlInfo () {
         String sql = "SELECT * from nameServerFileList";
         try {
-            ResultSet result = executeSql(sql);
+            ResultSet result = sqlService.executeSql(sql, connection, statement);
             while (result.next()) {
                 int fileID = result.getInt("fileID");
                 String fileName = result.getString("fileName");
@@ -146,91 +183,17 @@ class NameServerProcessor {
                 }
             }
             result.close();
-            try {
-                if (statement != null) { statement.close(); }
-                if (connection != null) { connection.close(); }
-            } catch (SQLException e) {
-                logger.error("SQL数据库资源释放错误！");
-                e.printStackTrace();
-            }
+            sqlService.releaseSql(connection, statement);
             logger.trace("获取nameServerFileList信息完毕！");
         } catch (SQLException e) {
             logger.error("获取nameServerFileList信息错误！");
             e.printStackTrace();
         }
-    }
-
-    // 用于运行SQL语句，需要在程序中手动关闭connection和statement
-    private ResultSet executeSql (String sql) {
-        connection = null;
-        statement = null;
-        ResultSet result = null;
-        try {
-            Class.forName(JDBC_DRIVER);
-            logger.trace("连接数据库...");
-            connection = DriverManager.getConnection(DB_URL, sql_USER, sql_PASSWORD);
-            statement = connection.createStatement();
-            result = statement.executeQuery(sql);
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        } catch (SQLException e) {
-            logger.error("SQL数据库连接错误！");
-            e.printStackTrace();
-        }
-        logger.trace("连接数据库成功，返回数据中...");
-        return result;
-    }
-
-    // int转bytes数组
-    private byte[] intToBytes (int value) {
-        byte[] result = new byte[4];
-        for (int i = 3; i >= 0; --i) {
-            result[i] = (byte)(value & 0xFF);
-            value = value >> 8;
-        }
-        return result;
-    }
+    }  
 
     // 注册函数
     private void register () {
         DataServerInfo result = nameSocket.register();
         dataServers.add(result);
-    }
-
-    // 用于服务sqlServerList的私有类
-    private class SqlServerListNode {
-        int fileID;
-        String fileName;
-        String filePath;
-        SqlServerListNode () {
-            fileID = 0; 
-            fileName = null; 
-            filePath = null;
-        }
-
-        SqlServerListNode (int fileID, String fileName, String filePath) {
-            this.fileID = fileID;
-            this.fileName = fileName;
-            this.filePath = filePath;
-        }
-    }
-
-}
-
-// 用于IP注册的类
-class DataServerInfo {
-    InetAddress address;
-    int port;
-    int load;
-    DataServerInfo () {
-        address = null;
-        port = 0;
-        load = 0;
-    }
-
-    DataServerInfo (InetAddress address, int port) {
-        this.address = address;
-        this.port = port;
-        load = 0;
     }
 }

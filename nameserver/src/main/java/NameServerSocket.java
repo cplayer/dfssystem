@@ -78,6 +78,26 @@ class NameServerSocket {
         return command;
     }
 
+    // 此函数接收数据长度的必须是ipLen的倍数
+    byte[] receive (int len) {
+        byte[] result = new byte[len];
+        try {
+            socket = ssocket.accept();
+            int readLen = 0;
+            InputStream instream = socket.getInputStream();
+            for (int i = 0; i < len; i += ipLen) {
+                readLen += instream.read(result, i, ipLen);
+            }
+            logger.trace("读取了" + readLen + "Bytes长度的数据。");
+            instream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("NameServer接收" + len + "MB时数据出错！");
+            e.printStackTrace();
+        }
+        return result;
+    }
+
     void sendData (byte[] data) {
         try {
             socket = ssocket.accept();
@@ -111,6 +131,23 @@ class NameServerSocket {
             logger.error("NameServer向DataServer发送chunk数据出错！");
             e.printStackTrace();
         }
+    }
+
+    byte[] receive (int len, InetAddress address, int port) {
+        byte[] result = new byte[len];
+        try {
+            Socket socket = new Socket(address, port);
+            InputStream instream = socket.getInputStream();
+            int readLen;
+            readLen = instream.read(result, 0, len);
+            logger.trace(String.format("NameServer接收了%dBytes数据。", readLen));
+            instream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("NameServer向DataServer接收数据出错！");
+            e.printStackTrace();
+        }
+        return result;
     }
 
     DataServerInfo register () {
