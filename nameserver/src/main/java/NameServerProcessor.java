@@ -11,6 +11,8 @@ import java.net.InetAddress;
 import java.sql.*;
 import java.util.TreeMap;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Random;
 import java.util.ArrayList;
 
@@ -83,7 +85,7 @@ class NameServerProcessor {
 
     // 下载功能函数
     private void download () {
-
+        // TODO: 下载
     }
 
     // 上传功能函数
@@ -112,8 +114,18 @@ class NameServerProcessor {
             }
             logger.trace("目前接收区块序号为：" + curIndex + ", 总序号为：" + totIndex);
         } while (curIndex < totIndex);
-        // 分发部分
-        // 分发策略：随机分发至至少3个dataServer
+        // 分发策略：分发至少3个负载最少的dataServer
+        ArrayList<DataServerInfo> distriList = new ArrayList<>(dataServers);
+        distriList.sort(new Comparator<DataServerInfo>() {
+            @Override
+            public int compare(DataServerInfo o1, DataServerInfo o2) {
+                return o1.load - o2.load;
+            }
+        });
+        // 前三个
+        for (int i = 0; i < 3; ++i) {
+            this.nameSocket.sendData(chunkData, distriList.get(i).address, distriList.get(i).port);
+        }
     }
 
     // 内部函数，用于加载SQL信息

@@ -7,6 +7,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.io.InputStream;
@@ -90,6 +91,24 @@ class NameServerSocket {
             socket.close();
         } catch (IOException e) {
             logger.error("NameServer发送数据出错！");
+            e.printStackTrace();
+        }
+    }
+
+    void sendData (byte[] data, InetAddress address, int port) {
+        try {
+            Socket socket = new Socket(address, port);
+            OutputStream outstream = socket.getOutputStream();
+            outstream.write(data, 0, headerLen);
+            outstream.flush();
+            for (int i = headerLen; i < headerLen + chunkLen; i += ipLen) {
+                outstream.write(data, i, ipLen);
+            }
+            outstream.flush();
+            outstream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("NameServer向DataServer发送chunk数据出错！");
             e.printStackTrace();
         }
     }
