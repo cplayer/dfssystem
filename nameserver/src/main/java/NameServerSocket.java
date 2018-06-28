@@ -115,6 +115,29 @@ class NameServerSocket {
         }
     }
 
+    void sendData (byte[] data, boolean seperate) {
+        if (seperate) {
+            try {
+                socket = ssocket.accept();
+                socket.setSendBufferSize(data.length);
+                OutputStream outstream = socket.getOutputStream();
+                outstream.write(data);
+                outstream.flush();
+                for (int i = headerLen; i < headerLen + chunkLen; i += ipLen) {
+                    outstream.write(data, i, ipLen);
+                }
+                outstream.flush();
+                logger.trace("NameServer发送了" + data.length + "字节数据。");
+                outstream.close();
+                // socket.shutdownOutput();
+                socket.close();
+            } catch (IOException e) {
+                logger.error("NameServer发送数据出错！");
+                e.printStackTrace();
+            }
+        }
+    }
+
     void sendData (byte[] data, InetAddress address, int port) {
         try {
             Socket socket = new Socket(address, port);

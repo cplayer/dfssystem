@@ -25,11 +25,12 @@ public class ClientMain {
             switch (index) {
                 case 0:
                     // 上传
-                    if (args.length < 2) {
-                        logger.error("上传文件需要给定一个合法的路径！");
+                    if (args.length < 3) {
+                        logger.error("上传文件需要给定一个合法的路径和一个dfs中的路径！");
                     } else {
                         String path = args[1];
-                        processor.upload(path);
+                        String dfsPath = args[2];
+                        processor.upload(path, dfsPath);
                     }
                     break;
                 case 1:
@@ -44,11 +45,11 @@ public class ClientMain {
                         String flag = args[1];
                         String target = args[2];
                         String flag_ID = "-id";
-                        String flag_NAME = "-name";
+                        String flag_PATH = "-path";
                         if (flag_ID.equals(flag)) {
                             processor.getFileById(target);
-                        } else if (flag_NAME.equals(flag)) {
-                            processor.getFileByName(target);
+                        } else if (flag_PATH.equals(flag)) {
+                            processor.getFileByPath(target);
                         } else {
                             logger.error("系统支持根据文件或者id获取，请检查是否选择两者之一！");
                         }

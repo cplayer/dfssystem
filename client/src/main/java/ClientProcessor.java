@@ -5,6 +5,7 @@
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -27,7 +28,7 @@ class ClientProcessor {
     }
 
     /** package private */
-    void upload (String path) {
+    void upload (String path, String dfsPath) {
         try {
             File fileUpload = new File(path);
             FileInputStream stream = new FileInputStream(fileUpload);
@@ -37,7 +38,14 @@ class ClientProcessor {
             int fileId = 0;
             long totIndex, curIndex;
             logger.trace("待读取文件总长度：" + fileLen + " Bytes.");
+            // 发送命令
             this.send("upload  ".getBytes());
+            // 发送文件总长度
+            this.send(longToBytes(fileLen));
+            // 发送文件路径
+            this.send(dfsPath.getBytes());
+            // 发送文件名
+            this.send(fileUpload.getName().getBytes());
             fileId = bytesToInt(this.receive(4));
             logger.trace("待上传文件的fileId为：" + fileId + ".");
             totIndex = fileUpload.length() / (chunkLen);
@@ -98,12 +106,43 @@ class ClientProcessor {
         System.out.println("列举成功！");
     }
 
-    void getFileById (String id) {
-        System.out.println("根据id获取文件成功！");
+    String getPath (String id) {
+        int fileId = Integer.parseInt(id);
+        this.send(intToBytes(fileId));
+        String result = new String(this.receive(255));
+        if (result.contains("File Not Found")) result = null;
+        return result;
     }
 
-    void getFileByName (String name) {
-        System.out.println("根据文件名获取文件成功！");
+    void getFileById (String id) {
+        String path = getPath(id);
+        if (path != null) {
+            getFileByPath(path);
+        } else {
+            logger.error("请输入正确的文件ID！");
+        }
+        // System.out.println("根据id获取文件成功！");
+    }
+
+    void getFileByPath (String path) {
+        try {
+            this.send(path.getBytes());
+            String fileName = new String(this.receive(255));
+            File fileOutput = new File(fileName);
+            FileOutputStream outstream = new FileOutputStream(fileOutput);
+            int fileChunkNum = bytesToInt(this.receive(4));
+            for (int i = 0; i < fileChunkNum; ++i) {
+                outstream.write(this.receive(2 * 1024 * 1024 + 64), 64, 2 * 1024 * 1024);
+            }
+            outstream.flush();
+            outstream.close();
+        } catch (FileNotFoundException e) {
+            logger.error("文件未找到！");
+            e.printStackTrace();
+        } catch (IOException e) {
+            logger.error("client读写文件错误！");
+            e.printStackTrace();
+        }
     }
 
     // 向dataserver传送数据

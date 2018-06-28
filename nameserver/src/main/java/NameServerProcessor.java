@@ -26,7 +26,7 @@ class NameServerProcessor {
     private TreeMap<Integer, SqlServerListNode> nameServerFileListMap;
     private ArrayList<DataServerInfo> dataServers;
 
-    private String[] commandList = { "upload", "list", "download", "register" };
+    private String[] commandList = { "upload", "list", "download", "register", "checkID" };
     private int fileIdUpperBound = 1 << 30;
 
     NameServerProcessor () {
@@ -66,6 +66,10 @@ class NameServerProcessor {
                         // 注册
                         this.register();
                         break;
+                    case 4:
+                        // （针对客户端）检查id对应的path
+                        this.checkID();
+                        break;
                     default:
                         logger.error("client发送的命令不正确！");
                         break;
@@ -79,24 +83,9 @@ class NameServerProcessor {
         }
     }
 
-    // 下载功能函数
-    private void download () {
-        // 先从client接收文件路径，暂时支持2MB的路径长度
+    private int check (int fileID) {
+        int totalChunks = -1;
         try {
-            byte[] routeData = nameSocket.receive(2 * 1024 * 1024);
-            String filePath = new String(routeData, "UTF-8");
-            String sql = String.format("SELECT * from nameServerFileList WHERE filePath='%s'", filePath);
-            ResultSet result = sqlService.executeSql(sql, connection, statement);
-            int fileID = 0;
-            String fileName;
-            while (result.next()) {
-                fileID = result.getInt("fileID");
-                fileName = result.getString("fileName");
-            }
-            result.close();
-            sqlService.releaseSql(connection, statement);
-            ArrayList<byte[]> chunks = new ArrayList<>();
-            int totalChunks = 0;
             for (DataServerInfo dataServer : dataServers) {
                 InetAddress curAddress = dataServer.address;
                 int curPort = dataServer.port;
@@ -107,15 +96,86 @@ class NameServerProcessor {
                     break;
                 }
             }
+        } catch (UnsupportedEncodingException e) {
+            logger.error("DataServer返回编码不正确！");
+            e.printStackTrace();
+        }
+        return totalChunks;
+    }
+
+    private boolean checkChunkNum (int chunkNum, int fileID, InetAddress curAddress, int port) {
+        this.nameSocket.sendData("checkNum".getBytes(), curAddress, port);
+        this.nameSocket.sendData(Convert.intToBytes(fileID), curAddress, port);
+        this.nameSocket.sendData(Convert.intToBytes(chunkNum), curAddress, port);
+        String status = new String(this.nameSocket.receive(8, curAddress, port));
+        if (status.contains("Accepted")) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    // 检查ID函数
+    private void checkID () {
+        try {
+            int fileID = Convert.byteToInt(nameSocket.receive(4), 0, 4);
+            String sql = String.format("SELECT * FROM nameServerFileList WHERE fileID=%d", fileID);
+            ResultSet result = sqlService.executeSql(sql, connection, statement);
+            String filePath = null;
+            if (result.next()) {
+                filePath = result.getString("filePath");
+            } else {
+                filePath = "File Not Found";
+            }
+            this.nameSocket.sendData(filePath.getBytes());
+        } catch (SQLException e) {
+            logger.error("DataServer数据库访问错误！");
+            e.printStackTrace();
+        }
+    }
+
+    // 下载功能函数
+    private void download () {
+        try {
+            // 先从client接收文件路径，暂时支持2MB的路径长度
+            byte[] routeData = nameSocket.receive(2 * 1024 * 1024 + 64);
+            String filePath = new String(routeData, "UTF-8");
+            String sql = String.format("SELECT * from nameServerFileList WHERE filePath='%s'", filePath);
+            ResultSet result = sqlService.executeSql(sql, connection, statement);
+            int fileID = 0;
+            String fileName = null;
+            while (result.next()) {
+                fileID = result.getInt("fileID");
+                fileName = result.getString("fileName");
+            }
+            result.close();
+            sqlService.releaseSql(connection, statement);
+            ArrayList<byte[]> chunks = new ArrayList<>();
+            // 先依次查询对应的chunk的总长度
+            int totalChunks = check(fileID);
+            // 然后逐个chunk去获取
             for (int i = 0; i < totalChunks; ++i) {
                 byte[] chunkData;
                 for (DataServerInfo dataServer : dataServers) {
                     InetAddress curAddress = dataServer.address;
                     int curPort = dataServer.port;
-
+                    if (checkChunkNum(i, fileID, curAddress, curPort)) {
+                        byte[] sendHeader = new byte[64];
+                        Convert.intIntoBytes(fileID, sendHeader, 60, 64);
+                        Convert.longIntoBytes(totalChunks, sendHeader, 32, 40);
+                        Convert.intIntoBytes(i, sendHeader, 52, 56);
+                        this.nameSocket.sendData(sendHeader, curAddress, curPort);
+                        chunkData = this.nameSocket.receiveChunk();
+                        chunks.add(chunkData);
+                        break;
+                    }
                 }
             }
-
+            this.nameSocket.sendData(fileName.getBytes());
+            this.nameSocket.sendData(Convert.intToBytes(totalChunks));
+            for (byte[] chunkData : chunks) {
+                this.nameSocket.sendData(chunkData, true);
+            }
         } catch (UnsupportedEncodingException e) {
             logger.error("client给出的下载文件路径不正确！");
             e.printStackTrace();
@@ -129,13 +189,19 @@ class NameServerProcessor {
     private void upload () {
         Random random = new Random(System.nanoTime());
         byte[] chunkData;
+        // 接收文件总长度
+        long fileLen = Convert.byteToLong(this.nameSocket.receive(8), 0, 8);
+        // 文件路径
+        String filePath = new String(this.nameSocket.receive(255), 0, 255);
+        // 文件名称
+        String fileName = new String(this.nameSocket.receive(255), 0, 255);
         int nextFileId = random.nextInt(fileIdUpperBound);
         while (nameServerFileListMap.containsKey(nextFileId)) {
             nextFileId = random.nextInt(fileIdUpperBound);
         }
         logger.trace("新的FileID = " + nextFileId);
         this.nameSocket.sendData(Convert.intToBytes(nextFileId));
-
+        // 发送数据
         long totIndex, curIndex;
         do {
             chunkData = nameSocket.receiveChunk();
@@ -161,8 +227,18 @@ class NameServerProcessor {
         });
         // 前三个
         for (int i = 0; i < 3; ++i) {
+            // 发送命令之后接数据
+            this.nameSocket.sendData("save    ".getBytes(), distriList.get(i).address, distriList.get(i).port);
             this.nameSocket.sendData(chunkData, distriList.get(i).address, distriList.get(i).port);
         }
+        // 在记录中添加sql信息
+        String sql = String.format("INSERT INTO nameServerFileList VALUES %d %s %s %d",
+                                    nextFileId,
+                                    fileName,
+                                    filePath,
+                                    fileLen);
+        sqlService.executeSql(sql, connection, statement);
+        sqlService.releaseSql(connection, statement);
     }
 
     // 内部函数，用于加载SQL信息

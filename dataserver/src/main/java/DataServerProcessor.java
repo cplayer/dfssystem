@@ -24,7 +24,7 @@ class DataServerProcessor {
     private int chunkLen = 2 * 1024 * 1024;
     private int ipLen = 2 * 1024;
     private ServerSocket serverSocket;
-    private String[] commandList = { "save", "get" };
+    private String[] commandList = { "save", "get", "checkID", "checkNum" };
 
     private static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
     private static final String DB_URL = "jdbc:mysql://localhost:3306/dfsSystem?useSSL=false";
@@ -114,8 +114,15 @@ class DataServerProcessor {
                         break;
                     case 1:
                         // 获取chunk
-                        this.check();
                         this.get();
+                        break;
+                    case 2:
+                        // 检查chunk
+                        this.check();
+                        break;
+                    case 3:
+                        // 检查chunkNumber是否存在
+                        this.checkChunk();
                         break;
                     default:
                         break;
@@ -246,6 +253,27 @@ class DataServerProcessor {
         }
     }
 
+    private void checkChunk () {
+        try {
+            int fileID = byteToInt(receive(4), 0, 4);
+            long fileChunk = byteToLong(receive(4), 0, 4);
+            String sql = String.format("SELECT * FROM dataServerFileList WHERE fileID=%d and fileChunk=%d",
+                                        fileID,
+                                        fileChunk);
+            ResultSet result = executeSql(sql);
+            String message;
+            if (result.next()) {
+                message = "Accepted";
+            } else {
+                message = "Denied";
+            }
+            send(message.getBytes());
+        } catch (SQLException e) {
+            logger.error("dataServer数据库访问错误！");
+            e.printStackTrace();
+        }
+    }
+
     private void get () {
         byte[] header = receiveHeader();
         int fileId = byteToInt(header, 56, 64);
@@ -258,10 +286,6 @@ class DataServerProcessor {
             int size = 0;
             result.last();
             size = result.getRow();
-            if (size == 0) {
-                send("File Not Found".getBytes());
-                return;
-            }
             if (size > 1) {
                 logger.error("返回值不止一个，请检查SQL数据库数据！");
                 sendCommand("error".getBytes());
