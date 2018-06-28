@@ -35,6 +35,7 @@ class NameServerProcessor {
         nameSocket = new NameServerSocket(36000);
         nameServerFileListMap = new TreeMap<>();
         sqlService = new NameServerSqlService();
+        dataServers = new ArrayList<>();
         dataServers.clear();
         loadSqlInfo();
     }

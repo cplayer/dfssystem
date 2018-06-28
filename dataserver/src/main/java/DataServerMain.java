@@ -12,12 +12,12 @@ public class DataServerMain {
 
     public static void main (String[] args) {
         logger.info("DataServer启动。");
-        if (args.length < 2) {
+        if (args.length < 1) {
             logger.error("请输入正确的启动端口号！");
             return;
         }
         // dataserver启动之后，通过死循环进行监听NameServer发来的指令。
-        DataServerProcessor processor = new DataServerProcessor();
+        DataServerProcessor processor = new DataServerProcessor(Integer.parseInt(args[0]));
         processor.listen();
     }
 }

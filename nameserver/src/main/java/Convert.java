@@ -1,3 +1,8 @@
+/**
+ * @author cplayer on 2018/6/16.
+ * @version 1.0
+ */
+
 class Convert {
     // int转bytes数组
     public static byte[] intToBytes (int value) {

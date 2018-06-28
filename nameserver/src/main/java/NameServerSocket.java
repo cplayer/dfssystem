@@ -188,16 +188,19 @@ class NameServerSocket {
             if (readLen < 8) {
                 logger.warn("dataServer注册信息小于指定长度，不为\"Register!");
             }
+            logger.trace("读取了Register命令。");
             byte[] tableSize = new byte[8];
             readLen = instream.read(tableSize);
             if (readLen < 8) {
                 logger.warn("dataServer负载信息小于指定长度!");
             }
+            logger.trace("读取了负载信息。");
             result.load = bytesToInt(tableSize);
-            instream.close();
+            socket.shutdownInput();
             outputStream.write("Success!".getBytes());
             outputStream.flush();
             outputStream.close();
+            logger.trace("发送了成功消息。");
             socket.close();
         } catch (IOException e) {
             logger.error("dataServer注册错误！");
