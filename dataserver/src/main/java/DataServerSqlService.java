@@ -36,6 +36,29 @@ class DataServerSqlService {
         return result;
     }
 
+    public boolean executeSqlUpdate (String sql, Connection connection, PreparedStatement statement) {
+        connection = null;
+        statement = null;
+        boolean result = false;
+        try {
+            Class.forName(JDBC_DRIVER);
+            logger.trace("DataServer连接数据库...");
+            connection = DriverManager.getConnection(DB_URL, sql_USER, sql_PASSWORD);
+            statement = connection.prepareStatement(sql, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE);
+            result = statement.execute();
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+            return false;
+        } catch (SQLException e) {
+            logger.error("DataServerSQL数据库连接错误！");
+            e.printStackTrace();
+            return false;
+        }
+        logger.trace("DataServer连接数据库成功，返回数据中...");
+        result = true;
+        return result;
+    }
+
     // 释放sql的statement和connection
     public void releaseSql (Connection connection, PreparedStatement statement) {
         try {

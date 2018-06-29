@@ -9,7 +9,6 @@ import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.sql.*;
 import org.apache.logging.log4j.Logger;
@@ -18,11 +17,10 @@ import org.apache.logging.log4j.LogManager;
 class DataServerProcessor {
     private static final Logger logger = LogManager.getLogger("dataServerLogger");
     private int portNumber = 0;
-    private String dfsFilePath = "/Users/cplayer/DailyDocuments/dfs-files";
+    private String dfsFilePath = "/Users/cplayer/DailyDocuments/dfs-files/";
     
     private int headerLen = 64;
     private int chunkLen = 2 * 1024 * 1024;
-    private int ipLen = 2 * 1024;
     
     private String[] commandList = { "save", "get", "checkID", "checkNum" };
     private DataServerSocket serverSocket;
@@ -54,7 +52,9 @@ class DataServerProcessor {
             byte[] result = new byte[8];
             outputStream.write("register".getBytes());
             outputStream.flush();
-
+            // 发送端口号
+            outputStream.write(Convert.intToBytes(this.portNumber));
+            outputStream.flush();
             // 取tableSize，即负载
             String sql = "SELECT * FROM dataServerFileList";
             ResultSet resultSet = sqlService.executeSql(sql, connection, statement);
@@ -91,16 +91,19 @@ class DataServerProcessor {
             while (true) {
                 // 在给定socket上持续监听
                 // 先监听命令
+                logger.trace("监听中...");
                 String command = serverSocket.receiveCommand();
+                logger.trace("命令为：" + command);
                 int index;
                 for (index = 0; index < commandList.length; ++index) {
-                    if (commandList[index].contains(command)) {
+                    if (command.contains(commandList[index])) {
                         break;
                     }
                 }
                 switch (index) {
                     case 0:
                         // 存储chunk
+                        logger.trace("NameServer发送了存储命令。");
                         this.save();
                         break;
                     case 1:
@@ -129,6 +132,7 @@ class DataServerProcessor {
     // 存储接受到的chunkData
     private void save () {
         try {
+            logger.trace("开始收取NameServer发送的数据。");
             byte[] chunkData = serverSocket.receiveChunk();
             int fileId = Convert.byteToInt(chunkData, 56, 64);
             long fileChunkTotal = Convert.byteToLong(chunkData, 24, 40);
@@ -139,6 +143,8 @@ class DataServerProcessor {
                                 + Long.valueOf(fileChunkTotal).toString() + "-"
                                 + Long.valueOf(fileChunk).toString() + "-"
                                 + Long.valueOf(currentMillSecond).toString() + ".chunkFile";
+            logger.trace(String.format("fileId = %d, fileChunkTotal = %d, fileChunk = %d, \n fileFullPath = %s",
+                                        fileId, fileChunkTotal, fileChunk, fileFullPath));
             File saveFile = new File(fileFullPath);
             if (!saveFile.exists()) {
                 saveFile.createNewFile();
@@ -146,7 +152,9 @@ class DataServerProcessor {
             FileOutputStream outputStream = new FileOutputStream(saveFile);
             outputStream.write(chunkData);
             outputStream.close();
+            logger.trace("写入文件完毕！");
             sqlInsert(fileId, fileChunk, fileChunkTotal, fileFullPath);
+            logger.trace("sql插入完毕！");
         } catch (IOException e) {
             logger.error("DataServer创建文件遇到IO错误！");
             e.printStackTrace();
@@ -154,21 +162,13 @@ class DataServerProcessor {
     }
 
     void sqlInsert (int fileId, long fileChunk, long fileChunkTotal, String fileFullPath) {
-        String sql = String.format("INSERT INTO dataServerFileList VALUES (%d %ld %d %s)", fileId, fileChunk, fileChunkTotal, fileFullPath);
-        try {
-            ResultSet result = sqlService.executeSql(sql, connection, statement);
-            result.close();
-        } catch (SQLException e) {
-            logger.error("获取dataServerFileList信息错误！");
-            e.printStackTrace();
+        String sql = String.format("INSERT INTO dataServerFileList (fileID, fileChunk, fileChunkTotal, filePath) VALUES (%d, %d, %d, '%s')", fileId, fileChunk, fileChunkTotal, fileFullPath);
+        logger.trace("sql语句为: " + sql);
+        boolean result = sqlService.executeSqlUpdate(sql, connection, statement);
+        if (!result) {
+            logger.error("SQL数据库更新错误！");
         }
-        try {
-            if (statement != null) { statement.close(); }
-            if (connection != null) { connection.close(); }
-        } catch (SQLException e) {
-            logger.error("SQL数据库资源释放错误！");
-            e.printStackTrace();
-        }
+        sqlService.releaseSql(connection, statement);
     }
 
     private void check () {

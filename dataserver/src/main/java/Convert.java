@@ -3,7 +3,7 @@
  * @version 1.0
  */
 
- class Convert {
+public class Convert {
     public static void copyTo (byte[] target, int begin, int end, byte[] source) {
         for (int i = begin; i < end; ++i) { target[i] = source[i - begin]; }
     }

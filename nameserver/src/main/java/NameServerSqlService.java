@@ -5,6 +5,7 @@
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
+
 import java.sql.*;
 
 class NameServerSqlService {
@@ -26,6 +27,26 @@ class NameServerSqlService {
             connection = DriverManager.getConnection(DB_URL, sql_USER, sql_PASSWORD);
             statement = connection.createStatement();
             result = statement.executeQuery(sql);
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        } catch (SQLException e) {
+            logger.error("SQL数据库连接错误！");
+            e.printStackTrace();
+        }
+        logger.trace("连接数据库成功，返回数据中...");
+        return result;
+    }
+
+    public boolean executeSqlUpdate (String sql, Connection connection, Statement statement) {
+        connection = null;
+        statement = null;
+        boolean result = false;
+        try {
+            Class.forName(JDBC_DRIVER);
+            logger.trace("连接数据库...");
+            connection = DriverManager.getConnection(DB_URL, sql_USER, sql_PASSWORD);
+            statement = connection.createStatement();
+            result = statement.execute(sql);
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
         } catch (SQLException e) {

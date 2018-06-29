@@ -16,7 +16,7 @@ class Convert {
 
     // int放入bytes数组
     public static void intIntoBytes (int value, byte[] target, int start, int end) {
-        for (int i = start; i < end; ++i) {
+        for (int i = end - 1; i >= start; --i) {
             target[i] = (byte)(value & 0xFF);
             value = value >> 8;
         }
@@ -24,7 +24,7 @@ class Convert {
 
     // long放入bytes数组
     public static void longIntoBytes (long value, byte[] target, int start, int end) {
-        for (int i = start; i < end; ++i) {
+        for (int i = end - 1; i >= start; --i) {
             target[i] = (byte)(value & 0xFF);
             value = value >> 8;
         }
@@ -35,7 +35,7 @@ class Convert {
         int ret = 0;
         for (int i = start; i < end; ++i) {
             ret = ret << 8;
-            ret |= (byte)(arr[i] & 0xFF);
+            ret |= (arr[i] & 0xFF);
         }
         return ret;
     }
@@ -45,7 +45,7 @@ class Convert {
         long ret = 0;
         for (int i = start; i < end; ++i) {
             ret = ret << 8;
-            ret |= (byte)(arr[i] & 0xFF);
+            ret |= (arr[i] & 0xFF);
         }
         return ret;
     }

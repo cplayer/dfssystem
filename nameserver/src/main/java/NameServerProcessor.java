@@ -119,7 +119,7 @@ class NameServerProcessor {
     // 检查ID函数
     private void checkID () {
         try {
-            int fileID = Convert.byteToInt(nameSocket.receive(4), 0, 4);
+            int fileID = Convert.byteToInt(nameSocket.receive(4, false), 0, 4);
             String sql = String.format("SELECT * FROM nameServerFileList WHERE fileID=%d", fileID);
             ResultSet result = sqlService.executeSql(sql, connection, statement);
             String filePath = null;
@@ -139,7 +139,7 @@ class NameServerProcessor {
     private void download () {
         try {
             // 先从client接收文件路径，暂时支持2MB的路径长度
-            byte[] routeData = nameSocket.receive(2 * 1024 * 1024 + 64);
+            byte[] routeData = nameSocket.receive(2 * 1024 * 1024 + 64, true);
             String filePath = new String(routeData, "UTF-8");
             String sql = String.format("SELECT * from nameServerFileList WHERE filePath='%s'", filePath);
             ResultSet result = sqlService.executeSql(sql, connection, statement);
@@ -191,11 +191,14 @@ class NameServerProcessor {
         Random random = new Random(System.nanoTime());
         byte[] chunkData;
         // 接收文件总长度
-        long fileLen = Convert.byteToLong(this.nameSocket.receive(8), 0, 8);
+        long fileLen = Convert.byteToLong(this.nameSocket.receive(8, false), 0, 8);
         // 文件路径
-        String filePath = new String(this.nameSocket.receive(255), 0, 255);
+        String filePath = new String(this.nameSocket.receive(255, false), 0, 255).trim();
         // 文件名称
-        String fileName = new String(this.nameSocket.receive(255), 0, 255);
+        String fileName = new String(this.nameSocket.receive(255, false), 0, 255).trim();
+        logger.trace("fileLen = " + fileLen);
+        logger.trace("filePath = " + filePath);
+        logger.trace("fileName = " + fileName);
         int nextFileId = random.nextInt(fileIdUpperBound);
         while (nameServerFileListMap.containsKey(nextFileId)) {
             nextFileId = random.nextInt(fileIdUpperBound);
@@ -217,29 +220,31 @@ class NameServerProcessor {
                 curIndex = (curIndex << 4) + tmp[i];
             }
             logger.trace("目前接收区块序号为：" + curIndex + ", 总序号为：" + totIndex);
-        } while (curIndex < totIndex);
-        // 分发策略：分发至少3个负载最少的dataServer
-        ArrayList<DataServerInfo> distriList = new ArrayList<>(dataServers);
-        distriList.sort(new Comparator<DataServerInfo>() {
-            @Override
-            public int compare(DataServerInfo o1, DataServerInfo o2) {
-                return o1.load - o2.load;
+            // 分发策略：分发至少3个负载最少的dataServer
+            ArrayList<DataServerInfo> distriList = new ArrayList<>(dataServers);
+            distriList.sort(new Comparator<DataServerInfo>() {
+                @Override
+                public int compare(DataServerInfo o1, DataServerInfo o2) {
+                    return o1.load - o2.load;
+                }
+            });
+            // 前三个，若不足三个按现有的算
+            for (int i = 0; i < Math.min(3, dataServers.size()); ++i) {
+                // 发送命令之后接数据
+                this.nameSocket.sendDataDirect("save    ".getBytes(), distriList.get(i).address, distriList.get(i).port);
+                this.nameSocket.sendData(chunkData, distriList.get(i).address, distriList.get(i).port);
+                distriList.get(i).load += 1;
             }
-        });
-        // 前三个
-        for (int i = 0; i < 3; ++i) {
-            // 发送命令之后接数据
-            this.nameSocket.sendData("save    ".getBytes(), distriList.get(i).address, distriList.get(i).port);
-            this.nameSocket.sendData(chunkData, distriList.get(i).address, distriList.get(i).port);
-        }
+        } while (curIndex < totIndex);
         // 在记录中添加sql信息
-        String sql = String.format("INSERT INTO nameServerFileList VALUES %d %s %s %d",
+        String sql = String.format("INSERT INTO nameServerFileList VALUES (%d, '%s', '%s', %d)",
                                     nextFileId,
                                     fileName,
                                     filePath,
                                     fileLen);
-        sqlService.executeSql(sql, connection, statement);
+        sqlService.executeSqlUpdate(sql, connection, statement);
         sqlService.releaseSql(connection, statement);
+        logger.trace("向DataServer写入数据完毕！");
     }
 
     // 内部函数，用于加载SQL信息

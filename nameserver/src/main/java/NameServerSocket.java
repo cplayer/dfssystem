@@ -79,21 +79,36 @@ class NameServerSocket {
     }
 
     // 此函数接收数据长度的必须是ipLen的倍数
-    byte[] receive (int len) {
+    byte[] receive (int len, boolean seperate) {
         byte[] result = new byte[len];
-        try {
-            socket = ssocket.accept();
-            int readLen = 0;
-            InputStream instream = socket.getInputStream();
-            for (int i = 0; i < len; i += ipLen) {
-                readLen += instream.read(result, i, ipLen);
+        if (seperate) {
+            try {
+                socket = ssocket.accept();
+                int readLen = 0;
+                InputStream instream = socket.getInputStream();
+                for (int i = 0; i < len; i += ipLen) {
+                    readLen += instream.read(result, i, ipLen);
+                }
+                logger.trace("读取了" + readLen + "Bytes长度的数据。");
+                instream.close();
+                socket.close();
+            } catch (IOException e) {
+                logger.error("NameServer接收" + len + "Bytes时数据出错！");
+                e.printStackTrace();
             }
-            logger.trace("读取了" + readLen + "Bytes长度的数据。");
-            instream.close();
-            socket.close();
-        } catch (IOException e) {
-            logger.error("NameServer接收" + len + "MB时数据出错！");
-            e.printStackTrace();
+        } else {
+            try {
+                socket = ssocket.accept();
+                int readLen = 0;
+                InputStream instream = socket.getInputStream();
+                readLen = instream.read(result, 0, len);
+                logger.trace("读取了" + readLen + "Bytes长度的数据。");
+                instream.close();
+                socket.close();
+            } catch (IOException e) {
+                logger.error("NameServer接收" + len + "Bytes时数据出错！");
+                e.printStackTrace();
+            }
         }
         return result;
     }
@@ -156,6 +171,20 @@ class NameServerSocket {
         }
     }
 
+    void sendDataDirect (byte[] data, InetAddress address, int port) {
+        try {
+            Socket socket = new Socket(address, port);
+            OutputStream outstream = socket.getOutputStream();
+            outstream.write(data);
+            outstream.flush();
+            outstream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("NameServer向DataServer发送数据出错！");
+            e.printStackTrace();
+        }
+    }
+
     byte[] receive (int len, InetAddress address, int port) {
         byte[] result = new byte[len];
         try {
@@ -183,12 +212,15 @@ class NameServerSocket {
             byte[] data = new byte[8];
             int readLen;
             result.address = socket.getInetAddress();
-            result.port = socket.getPort();
             readLen = instream.read(data);
             if (readLen < 8) {
                 logger.warn("dataServer注册信息小于指定长度，不为\"Register!");
             }
             logger.trace("读取了Register命令。");
+            byte[] port = new byte[4];
+            readLen = instream.read(port);
+            result.port = bytesToInt(port);
+            logger.trace("读取了端口，端口号为：" + result.port);
             byte[] tableSize = new byte[8];
             readLen = instream.read(tableSize);
             if (readLen < 8) {

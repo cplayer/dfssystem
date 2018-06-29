@@ -13,7 +13,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
 
- class DataServerSocket {
+class DataServerSocket {
     private static final Logger logger = LogManager.getLogger("dataServerLogger");
     private ServerSocket serverSocket;
     private int port = 0;
@@ -46,7 +46,6 @@ import java.io.IOException;
             }
             inputStream.close();
             socket.close();
-            serverSocket.close();
         } catch (IOException e) {
             logger.error("DataServer接收Command出错！");
             e.printStackTrace();
