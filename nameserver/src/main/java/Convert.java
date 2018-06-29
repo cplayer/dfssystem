@@ -14,6 +14,16 @@ class Convert {
         return result;
     }
 
+    // long转bytes数组
+    public static byte[] longToBytes (long value) {
+        byte[] result = new byte[8];
+        for (int i = 7; i >= 0; --i) {
+            result[i] = (byte)(value & 0xFF);
+            value = value >> 8;
+        }
+        return result;
+    }
+
     // int放入bytes数组
     public static void intIntoBytes (int value, byte[] target, int start, int end) {
         for (int i = end - 1; i >= start; --i) {

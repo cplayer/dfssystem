@@ -58,6 +58,7 @@ class NameServerProcessor {
                         break;
                     case 1:
                         // 列出
+                        this.list();
                         break;
                     case 2:
                         // 下载
@@ -81,6 +82,45 @@ class NameServerProcessor {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        }
+    }
+
+    private void list () {
+        try {
+            String path = new String(this.nameSocket.receive(255, false), "UTF-8").trim();
+            String sql = String.format("SELECT * FROM nameServerFileList WHERE filePath LIKE '%%%s%%'", path);
+            logger.trace(String.format("待执行的list命令的sql语句为：%s", sql));
+            ResultSet result = this.sqlService.executeSql(sql, connection, statement);
+            ArrayList<String> fileNames = new ArrayList<>();
+            ArrayList<String> filePaths = new ArrayList<>();
+            ArrayList<Long> fileLens = new ArrayList<>();
+            fileLens.clear(); fileNames.clear(); filePaths.clear();
+            while (result.next()) {
+                String fileName = result.getString("fileName");
+                String filePath = result.getString("filePath");
+                long fileLen = Long.parseLong(result.getString("fileLen"));
+                fileNames.add(fileName);
+                filePaths.add(filePath);
+                fileLens.add(fileLen);
+            }
+            if (fileNames.size() > 0) {
+                // 发送状态
+                this.nameSocket.sendData("Accepted".getBytes());
+                this.nameSocket.sendData(Convert.intToBytes(fileNames.size()));
+                for (int i = 0; i < fileNames.size(); ++i) {
+                    this.nameSocket.sendData(fileNames.get(i).getBytes());
+                    this.nameSocket.sendData(filePaths.get(i).getBytes());
+                    this.nameSocket.sendData(Convert.longToBytes(fileLens.get(i)));
+                }
+            } else {
+                this.nameSocket.sendData("Denied".getBytes());
+            }
+        } catch (UnsupportedEncodingException e) {
+            logger.error("client发送的路径编码不正确！");
+            e.printStackTrace();
+        } catch (SQLException e) {
+            logger.error("执行列举时访问sql不正确！");
+            e.printStackTrace();
         }
     }
 

@@ -11,7 +11,8 @@ public class Convert {
     public static int byteToInt (byte[] arr, int start, int end) {
         int ret = 0;
         for (int i = start; i < end; ++i) {
-            ret = ret * 256 + arr[i];
+            ret = ret << 8;
+            ret |= (arr[i] & 0xff);
         }
         return ret;
     }
@@ -19,7 +20,8 @@ public class Convert {
     public static long byteToLong (byte[] arr, int start, int end) {
         long ret = 0;
         for (int i = start; i < end; ++i) {
-            ret = ret * 256 + arr[i];
+            ret = ret << 8;
+            ret |= (arr[i] & 0xff);
         }
         return ret;
     }

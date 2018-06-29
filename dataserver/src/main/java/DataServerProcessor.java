@@ -78,9 +78,11 @@ class DataServerProcessor {
             logger.trace("注册成功！");
         } catch (IOException e) {
             logger.error("DataServer注册错误！");
+            System.exit(0);
             e.printStackTrace();
         } catch (SQLException e) {
             logger.error("DataServer注册读取SQL数据库错误！");
+            System.exit(0);
             e.printStackTrace();
         }
     }

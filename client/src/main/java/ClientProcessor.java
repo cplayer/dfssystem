@@ -9,10 +9,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.io.File;
 import java.net.Socket;
 import java.util.Arrays;
+import java.util.ArrayList;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
@@ -59,10 +60,9 @@ class ClientProcessor {
                 Arrays.fill(buffer, 0, 64, (byte)0);
                 // 填充数据头
                 // 第一部分
-                byte[] tmpBytes = "upload..".getBytes();
-                for (int i = 0; i < 8; ++i) { buffer[i] = tmpBytes[i]; }
+                System.arraycopy("upload..".getBytes(), 0, buffer, 0, 8);
                 // 第二部分
-                tmpBytes = longToBytes(readLen);
+                byte[] tmpBytes = longToBytes(readLen);
                 for (int i = 0; i < tmpBytes.length; ++i) {
                     buffer[23 - i] = tmpBytes[tmpBytes.length - 1 - i];
                 }
@@ -102,16 +102,56 @@ class ClientProcessor {
         logger.error("上传成功！");
     }
 
-    void list () {
-        System.out.println("列举成功！");
+    void list (String path) {
+        // 进入列举模式
+        this.send("list    ".getBytes());
+        if (path == null) { path = "/"; }
+        this.send(path.getBytes());
+        try {
+            String status = new String(this.receive(8), "UTF-8");
+            if (status.contains("Accepted")) {
+                int resultNumber = bytesToInt(this.receive(4));
+                ArrayList<String> fileNames = new ArrayList<>();
+                ArrayList<String> filePaths = new ArrayList<>();
+                ArrayList<Long> fileLens = new ArrayList<>();
+                fileLens.clear(); fileNames.clear(); filePaths.clear();
+                for (int i = 0; i < resultNumber; ++i) {
+                    String fileName = new String(this.receive(255), "UTF-8").trim();
+                    String filePath = new String(this.receive(255), "UTF-8").trim();
+                    long fileLen = bytesToLong(this.receive(8));
+                    fileNames.add(fileName);
+                    filePaths.add(filePath);
+                    fileLens.add(fileLen);
+                }
+                for (int i = 0; i < 120; ++i) {
+                    System.out.print('-');
+                }
+                System.out.println();
+                for (int i = 0; i < resultNumber; ++i) {
+                    System.out.println(String.format("序号：%d", i + 1));
+                    System.out.println(String.format("文件名：%s", fileNames.get(i)));
+                    System.out.println(String.format("文件路径：%s", filePaths.get(i)));
+                    System.out.println(String.format("文件大小：%d字节", fileLens.get(i)));
+                    for (int j = 0; j < 120; ++j) {
+                        System.out.print('-');
+                    }
+                }
+            } else if (status.contains("Denied")) {
+                logger.error("请输入正确的路径！");
+            }
+        } catch (UnsupportedEncodingException e) {
+            logger.error("NameServer发送的结果编码错误！");
+            e.printStackTrace();
+        }
     }
 
-    String getPath (String id) {
+    private String getPath (String id) {
         this.send("checkID ".getBytes());
         int fileId = Integer.parseInt(id);
         this.send(intToBytes(fileId));
         String result = new String(this.receive(255));
-        if (result.contains("File Not Found")) result = null;
+        String notAllowedResult = "File Not Found";
+        if (result.contains(notAllowedResult)) { result = null; }
         return result;
     }
 
@@ -162,16 +202,15 @@ class ClientProcessor {
         try {
             socket = new Socket(this.addressServer, this.portServer);
             OutputStream outputStream = socket.getOutputStream();
-            outputStream.write(sendData, 0, headerLen);
+            outputStream.write(sendData, 0, headerlen);
             outputStream.flush();
             for (int i = 0; i < chunklen; i += ipLen) {
-                outputStream.write(sendData, headerLen + i, ipLen);
+                outputStream.write(sendData, headerlen + i, ipLen);
                 outputStream.flush();
             }
             logger.trace("Client发送了" + chunklen + "Bytes数据。");
             outputStream.close();
             socket.close();
-            // socket.shutdownOutput();
         } catch (IOException e) {
             logger.error("发送数据错误！");
             e.printStackTrace();
@@ -187,7 +226,6 @@ class ClientProcessor {
             logger.trace("Client发送了" + sendData.length + "Bytes数据。");
             outputStream.close();
             socket.close();
-            // socket.shutdownOutput();
         } catch (IOException e) {
             logger.error("发送数据错误！");
             e.printStackTrace();
@@ -198,7 +236,6 @@ class ClientProcessor {
         byte[] result = new byte[length];
         try {
             socket = new Socket(this.addressServer, this.portServer);
-            // socket.setReceiveBufferSize(length);
             InputStream instream = socket.getInputStream();
             int readLen;
             readLen = instream.read(result);
@@ -255,6 +292,15 @@ class ClientProcessor {
 
     private int bytesToInt (byte[] value) {
         int result = 0;
+        for (int i = 0; i < value.length; ++i) {
+            result = result << 8;
+            result = result | (value[i] & 0xff);
+        }
+        return result;
+    }
+
+    private long bytesToLong (byte[] value) {
+        long result = 0;
         for (int i = 0; i < value.length; ++i) {
             result = result << 8;
             result = result | (value[i] & 0xff);

@@ -35,7 +35,13 @@ public class ClientMain {
                     break;
                 case 1:
                     // 列举所有对应文件信息
-                    processor.list();
+                    if (args.length == 2) {
+                        processor.list(args[1]);
+                    } else if (args.length == 1) {
+                        processor.list(null);
+                    } else {
+                        logger.error("请输入正确的列举路径！");
+                    }
                     break;
                 case 2:
                     // 下载对应的文件
