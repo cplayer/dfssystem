@@ -271,6 +271,7 @@ class NameServerProcessor {
     // 注册函数
     private void register () {
         DataServerInfo result = nameSocket.register();
+        logger.trace("注册完成！");
         dataServers.add(result);
     }
 }
