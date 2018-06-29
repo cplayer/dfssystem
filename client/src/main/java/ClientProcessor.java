@@ -107,6 +107,7 @@ class ClientProcessor {
     }
 
     String getPath (String id) {
+        this.send("checkID ".getBytes());
         int fileId = Integer.parseInt(id);
         this.send(intToBytes(fileId));
         String result = new String(this.receive(255));
@@ -115,8 +116,10 @@ class ClientProcessor {
     }
 
     void getFileById (String id) {
+        logger.trace("准备向NameServer请求文件路径...");
         String path = getPath(id);
         if (path != null) {
+            logger.trace(String.format("获取的文件路径为：%s", path));
             getFileByPath(path);
         } else {
             logger.error("请输入正确的文件ID！");
@@ -126,13 +129,20 @@ class ClientProcessor {
 
     void getFileByPath (String path) {
         try {
+            logger.trace("开始获取文件...");
+            this.send("download".getBytes());
             this.send(path.getBytes());
-            String fileName = new String(this.receive(255));
+            String fileName = new String(this.receive(255)).trim();
+            logger.trace(String.format("获取到的文件名为：%s", fileName));
             File fileOutput = new File(fileName);
             FileOutputStream outstream = new FileOutputStream(fileOutput);
             int fileChunkNum = bytesToInt(this.receive(4));
-            for (int i = 0; i < fileChunkNum; ++i) {
-                outstream.write(this.receive(2 * 1024 * 1024 + 64), 64, 2 * 1024 * 1024);
+            for (int i = 1; i <= fileChunkNum; ++i) {
+                logger.trace(String.format("目前获取第%d个chunk，共有%d个chunk", i, fileChunkNum));
+                byte[] chunkData = this.receiveChunk();
+                int chunkLen = bytesToInt(chunkData, 8, 24);
+                logger.trace(String.format("写入了%dBytes数据。", chunkLen));
+                outstream.write(chunkData, 64, chunkLen);
             }
             outstream.flush();
             outstream.close();
@@ -193,7 +203,7 @@ class ClientProcessor {
             int readLen;
             readLen = instream.read(result);
             if (readLen < length) {
-                logger.warn("client接收长度与给定长度不符合！");
+                logger.warn(String.format("client接收长度与给定长度不符合！接收长度为：%d，给定长度为：%d", readLen, length));
             }
             socket.close();
         } catch (IOException e) {
@@ -201,6 +211,28 @@ class ClientProcessor {
             e.printStackTrace();
         }
         return result;
+    }
+
+    private byte[] receiveChunk () {
+        byte[] chunkData = new byte[chunkLen + headerLen];
+        try {
+            socket = new Socket(this.addressServer, this.portServer);
+            int readLen;
+            InputStream instream = socket.getInputStream();
+            readLen = instream.read(chunkData, 0, headerLen);
+            logger.trace("读取了" + readLen + "Bytes数据头。");
+            readLen = 0;
+            for (int i = 0; i < chunkLen; i += ipLen) {
+                readLen += instream.read(chunkData, headerLen + i, ipLen);
+            }
+            logger.trace("读取了" + readLen + "Bytes数据。");
+            instream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("socket连接错误，请检查网络连接，并将此错误报告系统管理员！");
+            e.printStackTrace();
+        }
+        return chunkData;
     }
 
     private byte[] longToBytes (long value) {
@@ -228,5 +260,15 @@ class ClientProcessor {
             result = result | (value[i] & 0xff);
         }
         return result;
+    }
+
+    // byte数组转long
+    private static int bytesToInt (byte[] arr, int start, int end) {
+        int ret = 0;
+        for (int i = start; i < end; ++i) {
+            ret = ret << 8;
+            ret |= (arr[i] & 0xFF);
+        }
+        return ret;
     }
 }

@@ -56,6 +56,29 @@ class NameServerSocket {
         return chunkData;
     }
 
+    // 接收一个完整的块信息（包含块头+块内容），用于上传命令
+    byte[] receiveChunk (InetAddress address, int port) {
+        byte[] chunkData = new byte[chunkLen + headerLen];
+        try {
+            Socket socket = new Socket(address, port);
+            int readLen;
+            InputStream instream = socket.getInputStream();
+            readLen = instream.read(chunkData, 0, headerLen);
+            logger.trace("读取了" + readLen + "Bytes数据。");
+            readLen = 0;
+            for (int i = 0; i < chunkLen; i += ipLen) {
+                readLen += instream.read(chunkData, headerLen + i, ipLen);
+            }
+            logger.trace("读取了" + readLen + "Bytes数据。");
+            instream.close();
+            socket.close();
+        } catch (IOException e) {
+            logger.error("socket连接错误，请检查网络连接，并将此错误报告系统管理员！");
+            e.printStackTrace();
+        }
+        return chunkData;
+    }
+
     // 接收客户端的下一个指令
     byte[] receiveCommand () {
         byte[] command = new byte[commandLen];
@@ -136,7 +159,7 @@ class NameServerSocket {
                 socket = ssocket.accept();
                 socket.setSendBufferSize(data.length);
                 OutputStream outstream = socket.getOutputStream();
-                outstream.write(data);
+                outstream.write(data, 0, headerLen);
                 outstream.flush();
                 for (int i = headerLen; i < headerLen + chunkLen; i += ipLen) {
                     outstream.write(data, i, ipLen);
@@ -219,7 +242,7 @@ class NameServerSocket {
             logger.trace("读取了Register命令。");
             byte[] port = new byte[4];
             readLen = instream.read(port);
-            result.port = bytesToInt(port);
+            result.port = Convert.byteToInt(port, 0, 4);
             logger.trace("读取了端口，端口号为：" + result.port);
             byte[] tableSize = new byte[8];
             readLen = instream.read(tableSize);
@@ -227,7 +250,7 @@ class NameServerSocket {
                 logger.warn("dataServer负载信息小于指定长度!");
             }
             logger.trace("读取了负载信息。");
-            result.load = bytesToInt(tableSize);
+            result.load = Convert.byteToInt(tableSize, 0, 8);
             socket.shutdownInput();
             outputStream.write("Success!".getBytes());
             outputStream.flush();
@@ -238,15 +261,6 @@ class NameServerSocket {
             logger.error("dataServer注册错误！");
             e.printStackTrace();
             return null;
-        }
-        return result;
-    }
-
-    private int bytesToInt(byte[] value) {
-        int result = 0;
-        for (int i = 0; i < value.length; ++i) {
-            result = result << 8;
-            result = result | (value[i] & 0xff);
         }
         return result;
     }

@@ -87,10 +87,12 @@ class NameServerProcessor {
     private int check (int fileID) {
         int totalChunks = -1;
         try {
+            logger.trace("准备向DataServers查询文件总块数");
             for (DataServerInfo dataServer : dataServers) {
                 InetAddress curAddress = dataServer.address;
                 int curPort = dataServer.port;
-                this.nameSocket.sendData(Convert.intToBytes(fileID), curAddress, curPort);
+                this.nameSocket.sendDataDirect("checkID ".getBytes(), curAddress, curPort);
+                this.nameSocket.sendDataDirect(Convert.intToBytes(fileID), curAddress, curPort);
                 String status = new String(this.nameSocket.receive(8, curAddress, curPort), "UTF-8");
                 if (status.equals("Accepted")) {
                     totalChunks = Convert.byteToInt(this.nameSocket.receive(4, curAddress, curPort), 0, 4);
@@ -101,14 +103,16 @@ class NameServerProcessor {
             logger.error("DataServer返回编码不正确！");
             e.printStackTrace();
         }
+        logger.trace("查询成功！");
         return totalChunks;
     }
 
     private boolean checkChunkNum (int chunkNum, int fileID, InetAddress curAddress, int port) {
-        this.nameSocket.sendData("checkNum".getBytes(), curAddress, port);
-        this.nameSocket.sendData(Convert.intToBytes(fileID), curAddress, port);
-        this.nameSocket.sendData(Convert.intToBytes(chunkNum), curAddress, port);
+        this.nameSocket.sendDataDirect("checkNum".getBytes(), curAddress, port);
+        this.nameSocket.sendDataDirect(Convert.intToBytes(fileID), curAddress, port);
+        this.nameSocket.sendDataDirect(Convert.intToBytes(chunkNum), curAddress, port);
         String status = new String(this.nameSocket.receive(8, curAddress, port));
+        logger.trace(String.format("向%s:%d查询的结果为：%s", curAddress.getHostAddress(), port, status));
         if (status.contains("Accepted")) {
             return true;
         } else {
@@ -138,9 +142,10 @@ class NameServerProcessor {
     // 下载功能函数
     private void download () {
         try {
-            // 先从client接收文件路径，暂时支持2MB的路径长度
-            byte[] routeData = nameSocket.receive(2 * 1024 * 1024 + 64, true);
-            String filePath = new String(routeData, "UTF-8");
+            // 先从client接收文件路径，暂时支持2KB的路径长度
+            byte[] routeData = nameSocket.receive(2048, false);
+            String filePath = new String(routeData, "UTF-8").trim();
+            logger.trace(String.format("接收的文件路径为：%s", filePath));
             String sql = String.format("SELECT * from nameServerFileList WHERE filePath='%s'", filePath);
             ResultSet result = sqlService.executeSql(sql, connection, statement);
             int fileID = 0;
@@ -151,27 +156,33 @@ class NameServerProcessor {
             }
             result.close();
             sqlService.releaseSql(connection, statement);
+            logger.trace(String.format("查询到的文件ID为：%d，文件名为：%s", fileID, fileName));
             ArrayList<byte[]> chunks = new ArrayList<>();
             // 先依次查询对应的chunk的总长度
             int totalChunks = check(fileID);
             // 然后逐个chunk去获取
-            for (int i = 0; i < totalChunks; ++i) {
+            for (int i = 1; i <= totalChunks; ++i) {
                 byte[] chunkData;
                 for (DataServerInfo dataServer : dataServers) {
                     InetAddress curAddress = dataServer.address;
                     int curPort = dataServer.port;
+                    logger.trace(String.format("正在向DataServer（%s）进行查询...", curAddress.getHostAddress()));
                     if (checkChunkNum(i, fileID, curAddress, curPort)) {
+                        this.nameSocket.sendDataDirect("get     ".getBytes(), curAddress, curPort);
                         byte[] sendHeader = new byte[64];
                         Convert.intIntoBytes(fileID, sendHeader, 60, 64);
                         Convert.longIntoBytes(totalChunks, sendHeader, 32, 40);
                         Convert.intIntoBytes(i, sendHeader, 52, 56);
-                        this.nameSocket.sendData(sendHeader, curAddress, curPort);
-                        chunkData = this.nameSocket.receiveChunk();
+                        this.nameSocket.sendDataDirect(sendHeader, curAddress, curPort);
+                        logger.trace(String.format("正在接收第%d个Chunk...", i));
+                        chunkData = this.nameSocket.receiveChunk(curAddress, curPort);
                         chunks.add(chunkData);
+                        logger.trace(String.format("查询成功！第%d个chunk已发送！", i));
                         break;
                     }
                 }
             }
+            logger.trace("准备向Client发送chunk数据...");
             this.nameSocket.sendData(fileName.getBytes());
             this.nameSocket.sendData(Convert.intToBytes(totalChunks));
             for (byte[] chunkData : chunks) {
@@ -196,6 +207,7 @@ class NameServerProcessor {
         String filePath = new String(this.nameSocket.receive(255, false), 0, 255).trim();
         // 文件名称
         String fileName = new String(this.nameSocket.receive(255, false), 0, 255).trim();
+        filePath = filePath + fileName;
         logger.trace("fileLen = " + fileLen);
         logger.trace("filePath = " + filePath);
         logger.trace("fileName = " + fileName);

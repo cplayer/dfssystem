@@ -223,6 +223,7 @@ class DataServerProcessor {
         int fileId = Convert.byteToInt(header, 56, 64);
         long fileChunkTotal = Convert.byteToLong(header, 24, 40);
         long fileChunk = Convert.byteToLong(header, 40, 56);
+        logger.trace(String.format("NameServer需要的fileID = %d, fileChunk = %d, fileChunkTotal = %d", fileId, fileChunk, fileChunkTotal));
         String sql = String.format("SELECT * FROM dataServerFileList WHERE fileID=%d and fileChunk=%d and fileChunkTotal=%d",
                                     fileId, fileChunk, fileChunkTotal);
         ResultSet result = sqlService.executeSql(sql, connection, statement);
@@ -237,22 +238,25 @@ class DataServerProcessor {
             }
             result.first();
             String filePath = null;
-            while (result.next()) {
-                filePath = result.getString("filePath");
-            }
+            filePath = result.getString("filePath");
+            // while (result.next()) {
+            // }
+            logger.trace(String.format("已找到文件路径为：%s", filePath));
             File file = new File(filePath);
             FileInputStream inputStream = new FileInputStream(file);
             byte[] chunkData = new byte[chunkLen + headerLen];
             inputStream.read(chunkData);
             serverSocket.sendChunk(chunkData, headerLen, chunkLen);
             inputStream.close();
-            sqlService.releaseSql(connection, statement);
+            logger.trace("已发送指定文件！");
         } catch (SQLException e) {
             logger.error("DataServer读取SQL数据库错误，请检查get方法！");
             e.printStackTrace();
         } catch (IOException e) {
             logger.error("DataServer get方法读取文件错误！");
             e.printStackTrace();
+        } finally {
+            sqlService.releaseSql(connection, statement);
         }
     }
 
