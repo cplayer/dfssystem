@@ -18,6 +18,7 @@ class DataServerProcessor {
     private static final Logger logger = LogManager.getLogger("dataServerLogger");
     private int portNumber = 0;
     private String dfsFilePath = "/Users/cplayer/DailyDocuments/dfs-files/";
+    private String sqlTable = "dataServerFileList";
     
     private int headerLen = 64;
     private int chunkLen = 2 * 1024 * 1024;
@@ -34,6 +35,23 @@ class DataServerProcessor {
     DataServerProcessor () {};
     DataServerProcessor (int port) {
         this.portNumber = port;
+        serverSocket = new DataServerSocket(this.portNumber);
+        sqlService = new DataServerSqlService();
+        register();
+    }
+
+    DataServerProcessor (int port, String dfsFilePath) {
+        this.portNumber = port;
+        this.dfsFilePath = dfsFilePath;
+        serverSocket = new DataServerSocket(this.portNumber);
+        sqlService = new DataServerSqlService();
+        register();
+    }
+
+    DataServerProcessor (int port, String dfsFilePath, String sqlTable) {
+        this.portNumber = port;
+        this.dfsFilePath = dfsFilePath;
+        this.sqlTable = sqlTable;
         serverSocket = new DataServerSocket(this.portNumber);
         sqlService = new DataServerSqlService();
         register();
