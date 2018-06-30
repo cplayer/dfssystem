@@ -201,9 +201,10 @@ class ClientProcessor {
             } else {
                 System.out.println("不同！");
             }
-            int i = 0;
+            int i = 1;
             for (String element : md5) {
                 System.out.println("第" + i + "个md5值为：" + element);
+                i++;
             }
         } catch (UnsupportedEncodingException e) {
             logger.error("client给出的下载文件路径不正确！");
