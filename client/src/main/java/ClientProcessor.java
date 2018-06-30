@@ -190,8 +190,15 @@ class ClientProcessor {
                 md5.add(md5value);
             }
             System.out.println(status);
+            String goodResult = "Accepted";
+            if (status.equals(goodResult)) {
+                System.out.println("相同！");
+            } else {
+                System.out.println("不同！");
+            }
+            int i = 0;
             for (String element : md5) {
-                System.out.println(element);
+                System.out.println("第" + i + "个md5值为：" + element);
             }
         } catch (UnsupportedEncodingException e) {
             logger.error("client给出的下载文件路径不正确！");
