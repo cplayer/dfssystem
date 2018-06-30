@@ -74,7 +74,7 @@ class DataServerProcessor {
             outputStream.write(Convert.intToBytes(this.portNumber));
             outputStream.flush();
             // 取tableSize，即负载
-            String sql = "SELECT * FROM dataServerFileList";
+            String sql = "SELECT * FROM " + this.sqlTable;
             ResultSet resultSet = sqlService.executeSql(sql, connection, statement);
             int resultSetSize = 0;
             resultSet.last();
@@ -182,7 +182,7 @@ class DataServerProcessor {
     }
 
     void sqlInsert (int fileId, long fileChunk, long fileChunkTotal, String fileFullPath) {
-        String sql = String.format("INSERT INTO dataServerFileList (fileID, fileChunk, fileChunkTotal, filePath) VALUES (%d, %d, %d, '%s')", fileId, fileChunk, fileChunkTotal, fileFullPath);
+        String sql = String.format("INSERT INTO %s (fileID, fileChunk, fileChunkTotal, filePath) VALUES (%d, %d, %d, '%s')", this.sqlTable, fileId, fileChunk, fileChunkTotal, fileFullPath);
         logger.trace("sql语句为: " + sql);
         boolean result = sqlService.executeSqlUpdate(sql, connection, statement);
         if (!result) {
@@ -197,8 +197,8 @@ class DataServerProcessor {
         try {
             id = serverSocket.receive(4);
             int fileId = Convert.byteToInt(id, 0, 4);
-            String sql = String.format("SELECT * FROM dataServerFileList WHERE fileID=%d",
-                                        fileId);
+            String sql = String.format("SELECT * FROM %s WHERE fileID=%d",
+                                        this.sqlTable, fileId);
             ResultSet result = sqlService.executeSql(sql, connection, statement);
             if (result.next()) {
                 message = "Accepted";
@@ -221,7 +221,8 @@ class DataServerProcessor {
         try {
             int fileID = Convert.byteToInt(serverSocket.receive(4), 0, 4);
             long fileChunk = Convert.byteToLong(serverSocket.receive(4), 0, 4);
-            String sql = String.format("SELECT * FROM dataServerFileList WHERE fileID=%d and fileChunk=%d",
+            String sql = String.format("SELECT * FROM %s WHERE fileID=%d and fileChunk=%d",
+                                        this.sqlTable,
                                         fileID,
                                         fileChunk);
             ResultSet result = sqlService.executeSql(sql, connection, statement);
@@ -244,8 +245,8 @@ class DataServerProcessor {
         long fileChunkTotal = Convert.byteToLong(header, 24, 40);
         long fileChunk = Convert.byteToLong(header, 40, 56);
         logger.trace(String.format("NameServer需要的fileID = %d, fileChunk = %d, fileChunkTotal = %d", fileId, fileChunk, fileChunkTotal));
-        String sql = String.format("SELECT * FROM dataServerFileList WHERE fileID=%d and fileChunk=%d and fileChunkTotal=%d",
-                                    fileId, fileChunk, fileChunkTotal);
+        String sql = String.format("SELECT * FROM %s WHERE fileID=%d and fileChunk=%d and fileChunkTotal=%d",
+                                    this.sqlTable ,fileId, fileChunk, fileChunkTotal);
         ResultSet result = sqlService.executeSql(sql, connection, statement);
         try {
             int size = 0;
