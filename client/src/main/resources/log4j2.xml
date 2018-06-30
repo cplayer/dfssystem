@@ -9,7 +9,7 @@
         <Root level="error">
             <AppenderRef ref="Console"/>
         </Root>
-        <Logger name="clientLogger" level="trace" additivity="false">
+        <Logger name="clientLogger" level="error" additivity="false">
             <AppenderRef ref="Console"/>
         </Logger>
     </Loggers>

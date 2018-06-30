@@ -108,14 +108,17 @@ class NameServerProcessor {
             ArrayList<String> fileNames = new ArrayList<>();
             ArrayList<String> filePaths = new ArrayList<>();
             ArrayList<Long> fileLens = new ArrayList<>();
-            fileLens.clear(); fileNames.clear(); filePaths.clear();
+            ArrayList<String> fileIDs = new ArrayList<>();
+            fileLens.clear(); fileNames.clear(); filePaths.clear(); fileIDs.clear();
             while (result.next()) {
                 String fileName = result.getString("fileName");
                 String filePath = result.getString("filePath");
+                String fileID = result.getString("fileID");
                 long fileLen = Long.parseLong(result.getString("fileLen"));
                 fileNames.add(fileName);
                 filePaths.add(filePath);
                 fileLens.add(fileLen);
+                fileIDs.add(fileID);
             }
             if (fileNames.size() > 0) {
                 // 发送状态
@@ -125,6 +128,7 @@ class NameServerProcessor {
                     this.nameSocket.sendData(fileNames.get(i).getBytes());
                     this.nameSocket.sendData(filePaths.get(i).getBytes());
                     this.nameSocket.sendData(Convert.longToBytes(fileLens.get(i)));
+                    this.nameSocket.sendData(fileIDs.get(i).getBytes());
                 }
             } else {
                 this.nameSocket.sendData("Denied".getBytes());
@@ -195,6 +199,7 @@ class NameServerProcessor {
 
     private void checkPath () {
         try {
+            logger.trace("开始接受数据...");
             byte[] pathData = nameSocket.receive(2048, false);
             String filePath = new String(pathData, "UTF-8").trim();
             logger.trace(String.format("接收的文件路径为：%s", filePath));

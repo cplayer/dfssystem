@@ -124,7 +124,7 @@ class NameServerSocket {
                 socket = ssocket.accept();
                 int readLen = 0;
                 InputStream instream = socket.getInputStream();
-                readLen = instream.read(result, 0, len);
+                readLen = instream.read(result);
                 logger.trace("读取了" + readLen + "Bytes长度的数据。");
                 instream.close();
                 socket.close();

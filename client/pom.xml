@@ -46,7 +46,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>DataServerMain</mainClass>
+                            <mainClass>ClientMain</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>

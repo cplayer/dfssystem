@@ -99,7 +99,7 @@ class ClientProcessor {
             e.printStackTrace();
             return;
         }
-        logger.error("上传成功！");
+        System.out.println("上传成功！");
     }
 
     void list (String path) {
@@ -114,14 +114,17 @@ class ClientProcessor {
                 ArrayList<String> fileNames = new ArrayList<>();
                 ArrayList<String> filePaths = new ArrayList<>();
                 ArrayList<Long> fileLens = new ArrayList<>();
-                fileLens.clear(); fileNames.clear(); filePaths.clear();
+                ArrayList<String> fileIDs = new ArrayList<>();
+                fileLens.clear(); fileNames.clear(); filePaths.clear(); fileIDs.clear();
                 for (int i = 0; i < resultNumber; ++i) {
                     String fileName = new String(this.receive(255), "UTF-8").trim();
                     String filePath = new String(this.receive(255), "UTF-8").trim();
                     long fileLen = bytesToLong(this.receive(8));
+                    String fileID = new String(this.receive(255), "UTF-8").trim();
                     fileNames.add(fileName);
                     filePaths.add(filePath);
                     fileLens.add(fileLen);
+                    fileIDs.add(fileID);
                 }
                 for (int i = 0; i < 120; ++i) {
                     System.out.print('-');
@@ -132,10 +135,12 @@ class ClientProcessor {
                     System.out.println(String.format("文件名：%s", fileNames.get(i)));
                     System.out.println(String.format("文件路径：%s", filePaths.get(i)));
                     System.out.println(String.format("文件大小：%d字节", fileLens.get(i)));
+                    System.out.println(String.format("文件id：%s", fileIDs.get(i)));
                     for (int j = 0; j < 120; ++j) {
                         System.out.print('-');
                     }
                 }
+                System.out.println();
             } else if (status.contains("Denied")) {
                 logger.error("请输入正确的路径！");
             }
@@ -212,6 +217,10 @@ class ClientProcessor {
     }
 
     void checkExistPath (String path) {
+        if (path == null) {
+            System.out.println("文件不存在！");
+            return;
+        }
         logger.trace("开始发送文件路径...");
         this.send("checkFth".getBytes());
         this.send(path.getBytes());
@@ -265,6 +274,7 @@ class ClientProcessor {
             }
             outstream.flush();
             outstream.close();
+            System.out.println("下载完成！文件名为：" + fileName);
         } catch (FileNotFoundException e) {
             logger.error("文件未找到！");
             e.printStackTrace();

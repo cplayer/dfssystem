@@ -30,6 +30,7 @@ class DataServerProcessor {
     private PreparedStatement statement;
     private DataServerSqlService sqlService;
     private int portNameServer = 36000;
+    // private String addressNameServer = "10.211.55.2";
     private String addressNameServer = "127.0.0.1";
 
     DataServerProcessor () {};
