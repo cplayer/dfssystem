@@ -15,7 +15,7 @@ public class ClientMain {
             // 初始化处理类
             ClientProcessor processor = new ClientProcessor();
             // 判断是否有参数传入
-            String[] commandList = {"upload", "list", "download"};
+            String[] commandList = {"upload", "list", "download", "offset", "check"};
             String command = args[0];
             int index;
             // 判断是哪条命令
@@ -60,6 +60,12 @@ public class ClientMain {
                             logger.error("系统支持根据文件或者id获取，请检查是否选择两者之一！");
                         }
                     }
+                    break;
+                case 3:
+                    // 根据offset读取数据
+                    break;
+                case 4:
+                    // check文件是否在dfs里
                     break;
                 default:
                     logger.error("请检查输入参数是否正确或者命令是否被支持！");
