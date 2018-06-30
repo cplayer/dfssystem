@@ -14,6 +14,8 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Random;
 import java.util.ArrayList;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 class NameServerProcessor {
     private static final Logger logger = LogManager.getLogger("nameServerLogger");
@@ -26,7 +28,7 @@ class NameServerProcessor {
     private TreeMap<Integer, SqlServerListNode> nameServerFileListMap;
     private ArrayList<DataServerInfo> dataServers;
 
-    private String[] commandList = { "upload", "list", "download", "register", "checkID" };
+    private String[] commandList = { "upload", "list", "download", "register", "checkID", "checkFth", "offset", "md5" };
     private int fileIdUpperBound = 1 << 30;
 
     NameServerProcessor () {
@@ -71,6 +73,18 @@ class NameServerProcessor {
                     case 4:
                         // （针对客户端）检查id对应的path
                         this.checkID();
+                        break;
+                    case 5:
+                        // 检查给定path文件是否存在
+                        this.checkPath();
+                        break;
+                    case 6:
+                        // 检查offset的数据
+                        this.checkOffset();
+                        break;
+                    case 7:
+                        // 检查同样chunk的md5值
+                        this.checkMD5();
                         break;
                     default:
                         logger.error("client发送的命令不正确！");
@@ -175,6 +189,154 @@ class NameServerProcessor {
             this.nameSocket.sendData(filePath.getBytes());
         } catch (SQLException e) {
             logger.error("DataServer数据库访问错误！");
+            e.printStackTrace();
+        }
+    }
+
+    private void checkPath () {
+        try {
+            byte[] pathData = nameSocket.receive(2048, false);
+            String filePath = new String(pathData, "UTF-8").trim();
+            logger.trace(String.format("接收的文件路径为：%s", filePath));
+            String sql = String.format("SELECT * from nameServerFileList WHERE filePath='%s'", filePath);
+            ResultSet result = sqlService.executeSql(sql, connection, statement);
+            String returnStatus;
+            if (result.next()) returnStatus = "Accepted";
+            else returnStatus = "Denied";
+            sqlService.releaseSql(connection, statement);
+            this.nameSocket.sendData(returnStatus.getBytes());
+        } catch (UnsupportedEncodingException e) {
+            logger.error("client给出的文件路径不正确！");
+            e.printStackTrace();
+        } catch (SQLException e) {
+            logger.error("下载文件时访问SQL数据库错误！");
+            e.printStackTrace();
+        }
+    }
+
+    private void checkOffset () {
+        try {
+            int chunkNum = Convert.byteToInt(this.nameSocket.receive(4, false), 0, 4);
+            String filePath = new String(this.nameSocket.receive(255, false), "UTF-8").trim();
+            long offset = Convert.byteToLong(this.nameSocket.receive(8, false), 0, 8);
+            logger.trace(String.format("接收的文件路径为：%s", filePath));
+            String sql = String.format("SELECT * from nameServerFileList WHERE filePath='%s'", filePath);
+            ResultSet result = sqlService.executeSql(sql, connection, statement);
+            String status = "Denied";
+            int fileID = -1;
+            while (result.next()) {
+                fileID = result.getInt("fileID");
+            }
+            result.close();
+            sqlService.releaseSql(connection, statement);
+            if (fileID != -1) {
+                status = "Accepted";
+            }
+            this.nameSocket.sendData(status.getBytes());
+            if (fileID != -1) {
+                // 先依次查询对应的chunk的总长度
+                int totalChunks = check(fileID);
+                byte[] chunkData = null;
+                for (DataServerInfo dataServer : dataServers) {
+                    InetAddress curAddress = dataServer.address;
+                    int curPort = dataServer.port;
+                    logger.trace(String.format("正在向DataServer（%s）进行查询...", curAddress.getHostAddress()));
+                    if (checkChunkNum(chunkNum, fileID, curAddress, curPort)) {
+                        this.nameSocket.sendDataDirect("get     ".getBytes(), curAddress, curPort);
+                        byte[] sendHeader = new byte[64];
+                        Convert.intIntoBytes(fileID, sendHeader, 60, 64);
+                        Convert.longIntoBytes(totalChunks, sendHeader, 32, 40);
+                        Convert.intIntoBytes(chunkNum, sendHeader, 52, 56);
+                        this.nameSocket.sendDataDirect(sendHeader, curAddress, curPort);
+                        logger.trace(String.format("正在接收第%d个Chunk...", chunkNum));
+                        chunkData = this.nameSocket.receiveChunk(curAddress, curPort);
+                        logger.trace(String.format("查询成功！第%d个chunk已发送！", chunkNum));
+                        break;
+                    }
+                }
+                byte[] sends = new byte[1];
+                sends[0] = chunkData[64 + (int)(offset % (2 * 1024 * 1024))];
+                this.nameSocket.sendData(sends);
+            }
+            logger.trace("追踪offset结束。");
+        } catch (UnsupportedEncodingException e) {
+            logger.error("client给出的下载文件路径不正确！");
+            e.printStackTrace();
+        } catch (SQLException e) {
+            logger.error("下载文件时访问SQL数据库错误！");
+            e.printStackTrace();
+        }
+    }
+
+    private void checkMD5 () {
+        try {
+            String filePath = new String(this.nameSocket.receive(255, false), "UTF-8").trim();
+            int chunkNum = Convert.byteToInt(this.nameSocket.receive(4, false), 0, 4);
+            logger.trace(String.format("接收的文件路径为：%s", filePath));
+            String sql = String.format("SELECT * from nameServerFileList WHERE filePath='%s'", filePath);
+            ResultSet result = sqlService.executeSql(sql, connection, statement);
+            int fileID = 0;
+            while (result.next()) {
+                fileID = result.getInt("fileID");
+            }
+            result.close();
+            sqlService.releaseSql(connection, statement);
+            logger.trace(String.format("查询到的文件ID为：%d", fileID));
+            // 先依次查询对应的chunk的总长度
+            int totalChunks = check(fileID);
+            ArrayList<String> md5value = new ArrayList<>();
+            md5value.clear();
+            for (DataServerInfo dataServer : dataServers) {
+                byte[] chunkData;
+                InetAddress curAddress = dataServer.address;
+                int curPort = dataServer.port;
+                logger.trace(String.format("正在向DataServer（%s）进行查询...", curAddress.getHostAddress()));
+                if (checkChunkNum(chunkNum, fileID, curAddress, curPort)) {
+                    this.nameSocket.sendDataDirect("get     ".getBytes(), curAddress, curPort);
+                    byte[] sendHeader = new byte[64];
+                    Convert.intIntoBytes(fileID, sendHeader, 60, 64);
+                    Convert.longIntoBytes(totalChunks, sendHeader, 32, 40);
+                    Convert.intIntoBytes(chunkNum, sendHeader, 52, 56);
+                    this.nameSocket.sendDataDirect(sendHeader, curAddress, curPort);
+                    logger.trace(String.format("正在接收第%d个Chunk...", chunkNum));
+                    chunkData = this.nameSocket.receiveChunk(curAddress, curPort);
+                    logger.trace(String.format("查询成功！第%d个chunk已发送！", chunkNum));
+                    MessageDigest messageDigest = MessageDigest.getInstance("MD5");
+                    byte[] md5 = new byte[chunkData.length - 64];
+                    System.arraycopy(chunkData, 64, md5, 0, chunkData.length - 64);
+                    messageDigest.update(md5);
+                    byte[] resultByteArray = messageDigest.digest();
+                    char[] hexDigits = {'0','1','2','3','4','5','6','7','8','9', 'A','B','C','D','E','F' };
+                    char[] resultCharArray = new char[resultByteArray.length * 2];
+                    int index = 0;
+                    for (byte b : resultByteArray) {
+                        resultCharArray[index++] = hexDigits[b >>> 4 & 0xf];
+                        resultCharArray[index++] = hexDigits[b & 0xf];
+                    }
+                    String md5result = new String(resultCharArray);
+                    md5value.add(md5result);
+                }
+            }
+            String status = "Accepted";
+            for (int i = 0; i < md5value.size(); ++i) {
+                if (!md5value.get(i).equals(md5value.get(0))) {
+                    status = "Denied";
+                    break;
+                }
+            }
+            this.nameSocket.sendData(status.getBytes());
+            this.nameSocket.sendData(Convert.intToBytes(md5value.size()));
+            for (int i = 0; i < md5value.size(); ++i) {
+                this.nameSocket.sendData(md5value.get(i).getBytes());
+            }
+        } catch (UnsupportedEncodingException e) {
+            logger.error("client给出的下载文件路径不正确！");
+            e.printStackTrace();
+        } catch (SQLException e) {
+            logger.error("下载文件时访问SQL数据库错误！");
+            e.printStackTrace();
+        } catch (NoSuchAlgorithmException e) {
+            logger.error("没有md5算法！");
             e.printStackTrace();
         }
     }

@@ -15,7 +15,7 @@ public class ClientMain {
             // 初始化处理类
             ClientProcessor processor = new ClientProcessor();
             // 判断是否有参数传入
-            String[] commandList = {"upload", "list", "download", "offset", "check"};
+            String[] commandList = {"upload", "list", "download", "offset", "check", "md5"};
             String command = args[0];
             int index;
             // 判断是哪条命令
@@ -63,9 +63,56 @@ public class ClientMain {
                     break;
                 case 3:
                     // 根据offset读取数据
+                    // command + flag + content + offset
+                    if (args.length != 4) {
+                        logger.error("请输入正确的参数格式！");
+                    } else {
+                        String flag = args[1];
+                        String content = args[2];
+                        long offset = Long.parseLong(args[3]);
+                        if (flag.equals("-id")) {
+                            processor.getOffsetById(offset, content);
+                        } else if (flag.equals("-path")) {
+                            processor.getOffsetByPath(offset, content);
+                        } else {
+                            logger.error("请检查输入的标识是否正确！");
+                        }
+                    }
                     break;
                 case 4:
                     // check文件是否在dfs里
+                    // command + flag + content
+                    if (args.length != 3) {
+                        logger.error("请输入正确的参数格式！");
+                    } else {
+                        String flag = args[1];
+                        String content = args[2];
+                        if (flag.equals("-id")) {
+                            processor.checkExistId(content);
+                        } else if (flag.equals("-path")) {
+                            processor.checkExistPath(content);
+                        } else {
+                            logger.error("请检查输入的标识是否正确！");
+                        }
+                    }
+                    break;
+                case 5:
+                    // 检查不同chunk的md5值
+                    // command + flag + content + chunkNumber
+                    if (args.length != 4) {
+                        logger.error("请输入正确的参数格式！");
+                    } else {
+                        String flag = args[1];
+                        String content = args[2];
+                        int chunkNum = Integer.parseInt(args[3]);
+                        if (flag.equals("-id")) {
+                            processor.getMD5byID(chunkNum, content);
+                        } else if (flag.equals("-path")) {
+                            processor.getMD5byPath(chunkNum, content);
+                        } else {
+                            logger.error("请检查输入的标识是否正确！");
+                        }
+                    }
                     break;
                 default:
                     logger.error("请检查输入参数是否正确或者命令是否被支持！");

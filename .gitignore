@@ -25,3 +25,6 @@ nbdist/
 
 ### vscode ###
 .vscode/
+
+### Trash ###
+.DS_Store

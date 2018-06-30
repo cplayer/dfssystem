@@ -145,6 +145,78 @@ class ClientProcessor {
         }
     }
 
+    void getOffsetById (long offset, String id) {
+        String path = getPath(id).trim();
+        getOffsetByPath(offset, path);
+    }
+
+    void getOffsetByPath (long offset, String path) {
+        this.send("offset  ".getBytes());
+        int chunkNum = (int)(offset / (2 * 1024 * 1024)) + 1;
+        this.send(intToBytes(chunkNum));
+        this.send(path.getBytes());
+        this.send(longToBytes(offset));
+        try {
+            String status = new String(this.receive(8), "UTF-8").trim();
+            if (status.contains("Denied")) {
+                System.out.println("输入的文件路径不正确！");
+            } else {
+                byte[] result = new byte[1];
+                result = this.receive(1);
+                System.out.println("目标字节为：0b" + Integer.toBinaryString(result[0] & 0xff));
+            }
+        } catch (UnsupportedEncodingException e) {
+            logger.error("client给出的下载文件路径不正确！");
+            e.printStackTrace();
+        }
+    }
+
+    void getMD5byID (int chunkNum, String id) {
+        String path = getPath(id).trim();
+        getMD5byPath(chunkNum, path);
+    }
+
+    void getMD5byPath (int chunkNum, String path) {
+        this.send("md5     ".getBytes());
+        this.send(path.getBytes());
+        this.send(intToBytes(chunkNum));
+        try {
+            String status = new String(this.receive(255), "UTF-8").trim();
+            int totalMd5 = bytesToInt(this.receive(4));
+            ArrayList<String> md5 = new ArrayList<>();
+            md5.clear();
+            for (int i = 0; i < totalMd5; ++i) {
+                String md5value = new String(this.receive(255)).trim();
+                md5.add(md5value);
+            }
+            System.out.println(status);
+            for (String element : md5) {
+                System.out.println(element);
+            }
+        } catch (UnsupportedEncodingException e) {
+            logger.error("client给出的下载文件路径不正确！");
+            e.printStackTrace();
+        }
+    }
+
+    void checkExistId (String id) {
+        String path = getPath(id);
+        checkExistPath(path);
+    }
+
+    void checkExistPath (String path) {
+        logger.trace("开始发送文件路径...");
+        this.send("checkFth".getBytes());
+        this.send(path.getBytes());
+        String result = new String(this.receive(255)).trim();
+        String allowedResult = "Accepted";
+        if (result.contains(allowedResult)) {
+            System.out.println("文件存在！");
+        } else {
+            System.out.println("文件不存在！");
+        }
+    }
+
     private String getPath (String id) {
         this.send("checkID ".getBytes());
         int fileId = Integer.parseInt(id);
